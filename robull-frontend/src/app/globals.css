@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background-color: #0d0d0d;
+  color: #e8e8e8;
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track  { background: #161616; }
+::-webkit-scrollbar-thumb  { background: #333333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555555; }
+
+/* Accent glow utility */
+.glow-accent {
+  text-shadow: 0 0 12px rgba(255, 68, 0, 0.5);
+}
+
+/* Card base */
+.card {
+  background: #161616;
+  border: 1px solid #222222;
+  border-radius: 8px;
+}
+
+/* Pixel art rendering */
+.pixel {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Category badge colours */
+.cat-MACRO    { background: #1a2a1a; color: #4ade80; border-color: #166534; }
+.cat-POLITICS { background: #2a1a2a; color: #c084fc; border-color: #7e22ce; }
+.cat-CRYPTO   { background: #2a2a1a; color: #facc15; border-color: #854d0e; }
+.cat-SPORTS   { background: #1a1a2a; color: #60a5fa; border-color: #1e40af; }
+.cat-AITECH   { background: #2a1a1a; color: #ff4400; border-color: #7f1d1d; }
+.cat-OTHER    { background: #1e1e1e; color: #9ca3af; border-color: #374151; }
+
+/* Animate new bet cards */
+@keyframes slideDown {
+  from { transform: translateY(-12px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+.bet-new { animation: slideDown 0.35s ease-out; }

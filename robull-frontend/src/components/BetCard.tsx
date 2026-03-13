@@ -1,0 +1,159 @@
+'use client';
+
+import { useState } from 'react';
+import clsx from 'clsx';
+import { formatDistanceToNow } from 'date-fns';
+import type { Bet, MarketCategory } from '@/types';
+
+const CATEGORY_CLASS: Record<MarketCategory, string> = {
+  MACRO:    'cat-MACRO',
+  POLITICS: 'cat-POLITICS',
+  CRYPTO:   'cat-CRYPTO',
+  SPORTS:   'cat-SPORTS',
+  'AI/TECH':'cat-AITECH',
+  OTHER:    'cat-OTHER',
+};
+
+// Convert ISO country code to flag emoji
+function countryFlag(code: string): string {
+  return code
+    .toUpperCase()
+    .replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
+}
+
+function formatGNS(amount: number): string {
+  return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+interface BetCardProps {
+  bet: Bet;
+  isNew?: boolean;
+}
+
+export default function BetCard({ bet, isNew = false }: BetCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const agentName    = bet.agent_name ?? (bet as any).agent?.name ?? 'Unknown';
+  const countryCode  = bet.country_code ?? (bet as any).agent?.country_code ?? 'XX';
+  const org          = bet.org ?? (bet as any).agent?.org ?? '';
+  const model        = bet.model ?? (bet as any).agent?.model ?? '';
+  const question     = bet.question ?? (bet as any).market?.question ?? '';
+  const polyUrl      = bet.polymarket_url ?? (bet as any).market?.polymarket_url ?? '#';
+  const category     = (bet.category ?? (bet as any).market?.category ?? 'OTHER') as MarketCategory;
+  const outcomes     = bet.outcomes ?? (bet as any).market?.outcomes ?? [];
+  const outcomeName  = bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`;
+
+  const reasoning    = bet.reasoning ?? '';
+  const REASONING_LIMIT = 280;
+  const isLong = reasoning.length > REASONING_LIMIT;
+
+  const tweetText = encodeURIComponent(
+    `${agentName} (${org}) bets ${formatGNS(bet.gns_wagered)} GNS on "${outcomeName}" — ${bet.confidence}% confidence\n\n"${reasoning.slice(0, 200)}${reasoning.length > 200 ? '…' : ''}"\n\nSee the bet on Robull: https://robull.ai`
+  );
+
+  return (
+    <article
+      className={clsx(
+        'card p-4 transition-all duration-200 hover:border-subtle',
+        isNew && 'bet-new border-accent/40'
+      )}
+    >
+      {/* Header row */}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xl leading-none" title={countryCode}>
+            {countryFlag(countryCode)}
+          </span>
+          <div className="min-w-0">
+            <span className="font-mono text-sm font-semibold text-white truncate block">
+              {agentName}
+            </span>
+            <span className="font-mono text-xs text-muted">
+              {org}{org && model ? ' · ' : ''}{model}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span
+            className={clsx(
+              'rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase',
+              CATEGORY_CLASS[category]
+            )}
+          >
+            {category}
+          </span>
+          <span className="font-mono text-xs text-muted">
+            {formatDistanceToNow(new Date(bet.created_at), { addSuffix: true })}
+          </span>
+        </div>
+      </div>
+
+      {/* Market question */}
+      <p className="mb-2 text-xs text-muted font-mono leading-relaxed line-clamp-2">
+        {question}
+      </p>
+
+      {/* Bet summary */}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <span className="rounded bg-accent/10 border border-accent/30 px-2 py-1 font-mono text-sm font-bold text-accent">
+          {outcomeName}
+        </span>
+        <span className="font-mono text-xs text-white">
+          <span className="text-muted">WAGERED</span>{' '}
+          <span className="font-semibold">{formatGNS(bet.gns_wagered)} GNS</span>
+        </span>
+        <span className="font-mono text-xs text-white">
+          <span className="text-muted">CONFIDENCE</span>{' '}
+          <span className="font-semibold">{bet.confidence}%</span>
+        </span>
+      </div>
+
+      {/* Confidence bar */}
+      <div className="mb-3 h-1 w-full rounded-full bg-subtle">
+        <div
+          className="h-full rounded-full bg-accent transition-all"
+          style={{ width: `${bet.confidence}%` }}
+        />
+      </div>
+
+      {/* Reasoning */}
+      <div className="mb-3 rounded bg-surface border border-border p-3">
+        <p className="font-body text-sm leading-relaxed text-gray-300">
+          {isLong && !expanded
+            ? `${reasoning.slice(0, REASONING_LIMIT)}…`
+            : reasoning}
+        </p>
+        {isLong && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="mt-1 font-mono text-xs text-accent hover:text-accent-dim"
+          >
+            {expanded ? 'COLLAPSE' : 'READ MORE'}
+          </button>
+        )}
+      </div>
+
+      {/* Action row */}
+      <div className="flex items-center gap-2">
+        <a
+          href={polyUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 rounded bg-accent py-2 text-center font-mono text-xs font-bold text-white transition-colors hover:bg-accent-dim"
+        >
+          BET ON POLYMARKET
+        </a>
+        <a
+          href={`https://twitter.com/intent/tweet?text=${tweetText}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded border border-border px-3 py-2 font-mono text-xs text-muted transition-colors hover:border-white hover:text-white"
+          title="Share on X"
+        >
+          𝕏
+        </a>
+      </div>
+    </article>
+  );
+}
