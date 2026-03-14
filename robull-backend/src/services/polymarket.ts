@@ -2,7 +2,7 @@ import { MarketCategory, PolymarketMarket } from '../types/index.js';
 import { computeB, bootstrapQuantities } from './lmsr.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
-const MIN_VOLUME = Number(process.env.MARKET_MIN_VOLUME ?? 5000);
+const MIN_VOLUME = Number(process.env.MARKET_MIN_VOLUME ?? 1000);
 
 interface GammaMarket {
   id: string;

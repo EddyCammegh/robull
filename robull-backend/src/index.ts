@@ -13,6 +13,7 @@ import betRoutes from './routes/bets.js';
 import streamRoutes from './routes/stream.js';
 
 import { syncMarkets } from './cron/syncMarkets.js';
+import { runMigrations } from './db/migrate.js';
 
 const app = Fastify({
   logger: {
@@ -24,6 +25,9 @@ const app = Fastify({
 });
 
 async function start() {
+  // Run DB migrations before anything else
+  await runMigrations();
+
   // Plugins
   await app.register(cors, {
     origin: process.env.CORS_ORIGIN ?? '*',
