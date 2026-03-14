@@ -36,27 +36,36 @@ function classifyCategory(question: string, tags?: { label: string }[]): MarketC
   const tagLabels = (tags ?? []).map((t) => t.label.toLowerCase());
   const q = question.toLowerCase();
 
-  if (tagLabels.some((l) => l.includes('crypto') || l.includes('bitcoin') || l.includes('ethereum')) ||
-      q.match(/bitcoin|btc|ethereum|eth|crypto|defi|nft|solana/)) return 'CRYPTO';
-  if (tagLabels.some((l) => l.includes('politics') || l.includes('election') || l.includes('president')) ||
-      q.match(/election|president|senate|congress|prime minister|vote|ballot|democrat|republican/)) return 'POLITICS';
-  if (tagLabels.some((l) => l.includes('macro') || l.includes('economics') || l.includes('fed')) ||
-      q.match(/fed|interest rate|inflation|gdp|recession|unemployment|powell|fomc/)) return 'MACRO';
-  if (tagLabels.some((l) => l.includes('sports') || l.includes('nba') || l.includes('nfl')) ||
-      q.match(/nba|nfl|nhl|mlb|fifa|world cup|champion|super bowl|playoff|tournament/)) return 'SPORTS';
-  if (tagLabels.some((l) => l.includes('ai') || l.includes('tech') || l.includes('technology')) ||
-      q.match(/ai|openai|gpt|anthropic|claude|gemini|llm|model|tech|apple|google|meta|microsoft/)) return 'AI/TECH';
+  if (tagLabels.some((l) => l.includes('crypto') || l.includes('bitcoin') || l.includes('ethereum') || l.includes('solana') || l.includes('blockchain') || l.includes('token') || l.includes('defi')) ||
+      q.match(/bitcoin|btc|ethereum|eth\b|crypto|defi|nft|solana|sol\b|blockchain|token|altcoin|stablecoin|usdc|usdt|tether|binance|bnb|xrp|ripple|cardano|ada\b|avalanche|avax|polygon|matic|chainlink|link\b|uniswap|aave|doge|dogecoin|shiba|pepe\b|memecoin|coinbase|kraken|bybit/)) return 'CRYPTO';
+  if (tagLabels.some((l) => l.includes('politics') || l.includes('election') || l.includes('president') || l.includes('parliament') || l.includes('government')) ||
+      q.match(/election|president|senate|congress|prime minister|prime-minister|vote|ballot|democrat|republican|parliament|minister|chancellor|mayor|governor|political party|white house|cabinet|legislation|impeach|veto|tariff policy|nato|geopolit|war\b|ukraine|russia|china|taiwan|iran|israel|hamas|sanctions/)) return 'POLITICS';
+  if (tagLabels.some((l) => l.includes('macro') || l.includes('economics') || l.includes('economy') || l.includes('fed') || l.includes('finance')) ||
+      q.match(/\bfed\b|federal reserve|interest rate|inflation|gdp|recession|unemployment|powell|fomc|cpi|pce|treasury|bond yield|s&p|nasdaq|dow jones|stock market|ipo|earnings|tariff|trade war|deficit|debt ceiling|imf|world bank|monetary policy|fiscal/)) return 'MACRO';
+  if (tagLabels.some((l) => l.includes('sports') || l.includes('nba') || l.includes('nfl') || l.includes('soccer') || l.includes('football') || l.includes('baseball') || l.includes('hockey') || l.includes('tennis') || l.includes('golf')) ||
+      q.match(/\bnba\b|\bnfl\b|\bnhl\b|\bmlb\b|\bfifa\b|world cup|champions league|premier league|la liga|bundesliga|serie a|super bowl|playoff|championship|tournament|grand slam|wimbledon|us open|french open|australian open|formula 1|\bf1\b|golf|pga|masters|nascar|mma|\bufc\b|boxing|wrestling|olympic|athlete|quarterback|touchdown|homerun|hat.trick|match winner|season winner/)) return 'SPORTS';
+  if (tagLabels.some((l) => l.includes('ai') || l.includes('artificial intelligence') || l.includes('tech') || l.includes('technology') || l.includes('software') || l.includes('machine learning')) ||
+      q.match(/\bai\b|artificial intelligence|openai|chatgpt|\bgpt\b|anthropic|\bclaude\b|gemini|\bllm\b|large language model|machine learning|deep learning|neural network|model release|model launch|agent\b|robotics|\bnvidia\b|semiconductor|chip\b|apple|google|meta\b|microsoft|amazon|tesla|spacex|elon musk|sam altman|tech company|silicon valley|startup|software|app store|smartphone|iphone|android/)) return 'AI/TECH';
 
   return 'OTHER';
 }
 
+const PAGE_SIZE = 100;
+const TARGET_MARKETS = 500;
+
 export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
-  const url = `${GAMMA_API}/markets?active=true&closed=false&limit=100&order=volume&ascending=false`;
+  const allMarkets: GammaMarket[] = [];
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
+  for (let offset = 0; offset < TARGET_MARKETS; offset += PAGE_SIZE) {
+    const url = `${GAMMA_API}/markets?active=true&closed=false&limit=${PAGE_SIZE}&offset=${offset}&order=volume&ascending=false`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
+    const page = await res.json() as GammaMarket[];
+    allMarkets.push(...page);
+    if (page.length < PAGE_SIZE) break; // no more pages
+  }
 
-  const markets = await res.json() as GammaMarket[];
+  const markets = allMarkets;
   const results: NormalisedMarket[] = [];
 
   for (const m of markets) {
