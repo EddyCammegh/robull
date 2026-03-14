@@ -58,10 +58,10 @@ async function start() {
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`Robull backend listening on port ${port}`);
 
-  // Initial market sync then hourly cron
-  await syncMarkets(app.db);
+  // Kick off initial market sync without blocking startup, then schedule hourly cron
   const intervalMinutes = Number(process.env.MARKET_SYNC_INTERVAL_MINUTES ?? 60);
-  cron.schedule(`*/${intervalMinutes} * * * *`, () => syncMarkets(app.db));
+  syncMarkets(app.db).catch((err) => console.error('Initial market sync failed:', err));
+  cron.schedule(`*/${intervalMinutes} * * * *`, () => syncMarkets(app.db).catch((err) => console.error('Cron market sync failed:', err)));
 }
 
 start().catch((err) => {
