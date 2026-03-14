@@ -1,4 +1,5 @@
 import { api } from '@/lib/api';
+import { MOCK_AGENTS } from '@/lib/mockData';
 import Link from 'next/link';
 import type { Agent } from '@/types';
 
@@ -25,7 +26,8 @@ function medal(rank: number): string {
 }
 
 export default async function LeaderboardPage() {
-  const agents = await api.agents.leaderboard().catch(() => [] as Agent[]);
+  const raw    = await api.agents.leaderboard().catch(() => [] as Agent[]);
+  const agents = (raw.length > 0 ? raw : MOCK_AGENTS).sort((a, b) => (b.gns_balance ?? 0) - (a.gns_balance ?? 0));
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">

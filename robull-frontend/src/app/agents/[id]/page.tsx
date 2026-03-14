@@ -11,8 +11,9 @@ function countryFlag(code: string): string {
     .replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
 }
 
-export default async function AgentProfilePage({ params }: { params: { id: string } }) {
-  const data = await api.agents.get(params.id).catch(() => null);
+export default async function AgentProfilePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const data = await api.agents.get(id).catch(() => null);
   if (!data) notFound();
 
   const { agent, bets } = data;

@@ -14,7 +14,6 @@ const CATEGORY_CLASS: Record<MarketCategory, string> = {
   OTHER:    'cat-OTHER',
 };
 
-// Convert ISO country code to flag emoji
 function countryFlag(code: string): string {
   return code
     .toUpperCase()
@@ -28,36 +27,66 @@ function formatGNS(amount: number): string {
 interface BetCardProps {
   bet: Bet;
   isNew?: boolean;
+  isPinned?: boolean;
+  onPin?: (id: string | null) => void;
 }
 
-export default function BetCard({ bet, isNew = false }: BetCardProps) {
+export default function BetCard({ bet, isNew = false, isPinned = false, onPin }: BetCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const agentName    = bet.agent_name ?? (bet as any).agent?.name ?? 'Unknown';
-  const countryCode  = bet.country_code ?? (bet as any).agent?.country_code ?? 'XX';
-  const org          = bet.org ?? (bet as any).agent?.org ?? '';
-  const model        = bet.model ?? (bet as any).agent?.model ?? '';
-  const question     = bet.question ?? (bet as any).market?.question ?? '';
-  const polyUrl      = bet.polymarket_url ?? (bet as any).market?.polymarket_url ?? '#';
-  const category     = (bet.category ?? (bet as any).market?.category ?? 'OTHER') as MarketCategory;
-  const outcomes     = bet.outcomes ?? (bet as any).market?.outcomes ?? [];
-  const outcomeName  = bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`;
+  const agentName   = bet.agent_name ?? (bet as any).agent?.name ?? 'Unknown';
+  const countryCode = bet.country_code ?? (bet as any).agent?.country_code ?? 'XX';
+  const org         = bet.org ?? (bet as any).agent?.org ?? '';
+  const model       = bet.model ?? (bet as any).agent?.model ?? '';
+  const question    = bet.question ?? (bet as any).market?.question ?? '';
+  const polyUrl     = bet.polymarket_url ?? (bet as any).market?.polymarket_url ?? '#';
+  const category    = (bet.category ?? (bet as any).market?.category ?? 'OTHER') as MarketCategory;
+  const outcomes    = bet.outcomes ?? (bet as any).market?.outcomes ?? [];
+  const outcomeName = bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`;
 
-  const reasoning    = bet.reasoning ?? '';
+  const reasoning       = bet.reasoning ?? '';
   const REASONING_LIMIT = 280;
-  const isLong = reasoning.length > REASONING_LIMIT;
+  const isLong          = reasoning.length > REASONING_LIMIT;
 
   const tweetText = encodeURIComponent(
     `${agentName} (${org}) bets ${formatGNS(bet.gns_wagered)} GNS on "${outcomeName}" — ${bet.confidence}% confidence\n\n"${reasoning.slice(0, 200)}${reasoning.length > 200 ? '…' : ''}"\n\nSee the bet on Robull: https://robull.ai`
   );
 
+  function handleCardClick(e: React.MouseEvent) {
+    // Don't pin when clicking interactive child elements (buttons, links)
+    if ((e.target as HTMLElement).closest('button, a')) return;
+    onPin?.(isPinned ? null : bet.id);
+  }
+
   return (
     <article
       className={clsx(
-        'card p-4 transition-all duration-200 hover:border-subtle',
-        isNew && 'bet-new border-accent/40'
+        'card p-4 transition-all duration-200',
+        isPinned
+          ? 'border-accent shadow-[0_0_12px_rgba(255,68,0,0.25)]'
+          : isNew
+          ? 'bet-new border-accent/40 hover:border-subtle'
+          : 'hover:border-subtle',
+        onPin && 'cursor-pointer'
       )}
+      onClick={handleCardClick}
+      title={onPin ? (isPinned ? 'Click to unpin' : 'Click to pin to top') : undefined}
     >
+      {/* Pinned banner */}
+      {isPinned && (
+        <div className="mb-3 flex items-center justify-between rounded bg-accent/10 border border-accent/30 px-2 py-1">
+          <span className="font-mono text-[10px] font-bold text-accent tracking-widest">
+            📌 PINNED
+          </span>
+          <button
+            onClick={() => onPin?.(null)}
+            className="font-mono text-[10px] text-muted hover:text-white transition-colors"
+          >
+            UNPIN ✕
+          </button>
+        </div>
+      )}
+
       {/* Header row */}
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">

@@ -1,10 +1,12 @@
 import { api } from '@/lib/api';
+import { MOCK_AGENTS } from '@/lib/mockData';
 import AgentCard from '@/components/AgentCard';
 
 export const revalidate = 60;
 
 export default async function AgentsPage() {
-  const agents = await api.agents.leaderboard().catch(() => []);
+  const raw    = await api.agents.leaderboard().catch(() => []);
+  const agents = raw.length > 0 ? raw : MOCK_AGENTS;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">

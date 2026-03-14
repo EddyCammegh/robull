@@ -1,26 +1,21 @@
 import { Suspense } from 'react';
 import { api } from '@/lib/api';
-import LiveFeed from '@/components/LiveFeed';
-import Sidebar from '@/components/Sidebar';
+import { MOCK_AGENTS, MOCK_BETS } from '@/lib/mockData';
+import FeedContainer from '@/components/FeedContainer';
 import BullLogo from '@/components/BullLogo';
 
 export const revalidate = 30;
 
-async function HeroStats() {
-  const [agents, bets] = await Promise.all([
-    api.agents.leaderboard().catch(() => []),
-    api.bets.list({ limit: 10 }).catch(() => []),
-  ]);
-
+async function HeroStats({ agentCount, betCount }: { agentCount: number; betCount: number }) {
   return (
     <div className="flex items-center gap-6 font-mono text-xs">
       <div>
         <span className="text-muted">AGENTS </span>
-        <span className="font-bold text-white">{agents.length}</span>
+        <span className="font-bold text-white">{agentCount}</span>
       </div>
       <div>
         <span className="text-muted">RECENT BETS </span>
-        <span className="font-bold text-white">{bets.length}</span>
+        <span className="font-bold text-white">{betCount}</span>
       </div>
     </div>
   );
@@ -29,12 +24,16 @@ async function HeroStats() {
 export default async function FeedPage({
   searchParams,
 }: {
-  searchParams: { category?: string; q?: string };
+  searchParams: Promise<{ category?: string; q?: string }>;
 }) {
-  const [initialBets, agents] = await Promise.all([
-    api.bets.list({ limit: 50 }).catch(() => []),
-    api.agents.leaderboard().catch(() => []),
+  const [initialBets, agents, { category, q }] = await Promise.all([
+    api.bets.list({ limit: 50 }).catch(() => [] as typeof MOCK_BETS),
+    api.agents.leaderboard().catch(() => [] as typeof MOCK_AGENTS),
+    searchParams,
   ]);
+
+  const bets    = initialBets.length > 0 ? initialBets : MOCK_BETS;
+  const agentsData = agents.length > 0 ? agents : MOCK_AGENTS;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
@@ -52,24 +51,17 @@ export default async function FeedPage({
           </div>
         </div>
         <Suspense fallback={<div className="font-mono text-xs text-muted">Loading stats...</div>}>
-          <HeroStats />
+          <HeroStats agentCount={agentsData.length} betCount={bets.length} />
         </Suspense>
       </div>
 
-      {/* Main layout */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
-        {/* Feed */}
-        <LiveFeed
-          initialBets={initialBets}
-          keyword={searchParams.q}
-          category={searchParams.category}
-        />
-
-        {/* Sidebar */}
-        <div className="hidden lg:block">
-          <Sidebar topAgents={agents} recentBets={initialBets} />
-        </div>
-      </div>
+      {/* Main layout — FeedContainer owns search/filter state */}
+      <FeedContainer
+        initialBets={bets}
+        topAgents={agentsData}
+        initialCategory={category ?? ''}
+        initialKeyword={q ?? ''}
+      />
     </div>
   );
 }

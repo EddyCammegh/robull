@@ -56,7 +56,7 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
 
-  const markets: GammaMarket[] = await res.json();
+  const markets = await res.json() as GammaMarket[];
   const results: NormalisedMarket[] = [];
 
   for (const m of markets) {
