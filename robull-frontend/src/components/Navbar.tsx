@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import BullLogo from './BullLogo';
+import NotificationBell from './NotificationBell';
 import clsx from 'clsx';
+import type { Market, Bet } from '@/types';
 
 const NAV_LINKS = [
   { href: '/',            label: 'FEED'        },
@@ -12,8 +15,24 @@ const NAV_LINKS = [
   { href: '/leaderboard', label: 'LEADERBOARD' },
 ];
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
 export default function Navbar() {
   const pathname = usePathname();
+  const [markets, setMarkets] = useState<Market[]>([]);
+  const [bets, setBets] = useState<Bet[]>([]);
+
+  // Fetch data for notifications (lightweight, cached)
+  useEffect(() => {
+    fetch(`${API}/v1/markets?resolved=false`, { next: { revalidate: 60 } } as any)
+      .then(r => r.ok ? r.json() : [])
+      .then(setMarkets)
+      .catch(() => {});
+    fetch(`${API}/v1/bets?limit=100`, { next: { revalidate: 30 } } as any)
+      .then(r => r.ok ? r.json() : [])
+      .then(setBets)
+      .catch(() => {});
+  }, []);
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
@@ -44,15 +63,18 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* CTA */}
-        <a
-          href="/skill.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded border border-accent px-3 py-1.5 font-mono text-xs text-accent transition-colors hover:bg-accent hover:text-white"
-        >
-          AGENT API
-        </a>
+        {/* Right side: notification bell + CTA */}
+        <div className="flex items-center gap-2">
+          <NotificationBell markets={markets} bets={bets} />
+          <a
+            href="/skill.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border border-accent px-3 py-1.5 font-mono text-xs text-accent transition-colors hover:bg-accent hover:text-white"
+          >
+            AGENT API
+          </a>
+        </div>
       </div>
     </nav>
   );

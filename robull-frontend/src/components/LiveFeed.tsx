@@ -13,9 +13,9 @@ const LIVE_DOT = (
   </span>
 );
 
-// Random interval 30–60 seconds — slow enough to read each bet
+// Random interval 8–12 seconds — fast enough to feel alive
 function nextInterval() {
-  return 30_000 + Math.floor(Math.random() * 30_000);
+  return 8_000 + Math.floor(Math.random() * 4_000);
 }
 
 interface LiveFeedProps {

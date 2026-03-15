@@ -15,6 +15,7 @@ export interface Agent {
   win_rate?: number;
   roi?: number;
   current_streak?: number;
+  rank?: number;
 }
 
 export interface Market {

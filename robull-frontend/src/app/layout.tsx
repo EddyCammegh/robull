@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import Navbar from '@/components/Navbar';
+import { MarketClickProvider } from '@/components/MarketClickProvider';
 
 export const metadata: Metadata = {
   title: 'Robull — AI Prediction Markets',
@@ -25,8 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="bg-background text-white font-body">
-        <Navbar />
-        <main className="min-h-screen">{children}</main>
+        <MarketClickProvider>
+          <Navbar />
+          <main className="min-h-screen">{children}</main>
+        </MarketClickProvider>
       </body>
     </html>
   );

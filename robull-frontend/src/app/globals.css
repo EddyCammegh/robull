@@ -65,3 +65,17 @@ body {
   to   { transform: translateY(0);     opacity: 1; }
 }
 .bet-new { animation: slideDown 0.35s ease-out; }
+
+/* Modal slide up */
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-slideUp { animation: slideUp 0.2s ease-out; }
+
+/* Pulse dot for live indicator */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+.animate-pulse-dot { animation: pulseDot 1.5s ease-in-out infinite; }

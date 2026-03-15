@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
+import { useMarketClick } from './MarketClickProvider';
 import type { Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -34,6 +35,7 @@ interface BetCardProps {
 
 export default function BetCard({ bet, isNew = false, isPinned = false, onPin }: BetCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const { openMarket } = useMarketClick();
 
   const agentName   = bet.agent_name ?? (bet as any).agent?.name ?? 'Unknown';
   const countryCode = bet.country_code ?? (bet as any).agent?.country_code ?? 'XX';
@@ -119,10 +121,13 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
         </div>
       </div>
 
-      {/* Market question */}
-      <p className="mb-2 text-xs text-muted font-mono leading-relaxed line-clamp-2">
+      {/* Market question — clickable to open detail */}
+      <button
+        onClick={(e) => { e.stopPropagation(); openMarket(bet.market_id); }}
+        className="mb-2 text-xs text-muted font-mono leading-relaxed line-clamp-2 text-left hover:text-accent transition-colors cursor-pointer"
+      >
         {question}
-      </p>
+      </button>
 
       {/* Bet summary */}
       <div className="mb-3 flex flex-wrap items-center gap-3">

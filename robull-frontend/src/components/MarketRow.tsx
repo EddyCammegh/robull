@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
 import { api } from '@/lib/api';
+import { useMarketClick } from './MarketClickProvider';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -94,6 +95,7 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
   const [open, setOpen] = useState(false);
   const [bets, setBets] = useState<Bet[]>(market.bets ?? []);
   const [loadingBets, setLoadingBets] = useState(false);
+  const { openMarket } = useMarketClick();
   const probs    = liveProbs ?? market.current_probs ?? market.initial_probs ?? [];
   const category = market.category as MarketCategory;
 
@@ -128,7 +130,12 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
             >
               {category}
             </span>
-            <p className="font-body text-sm text-white font-medium truncate">{market.question}</p>
+            <span
+              onClick={(e) => { e.stopPropagation(); openMarket(market.id, market); }}
+              className="font-body text-sm text-white font-medium truncate hover:text-accent transition-colors cursor-pointer"
+            >
+              {market.question}
+            </span>
           </div>
 
           <div className="flex items-center gap-4 flex-shrink-0">
