@@ -17,19 +17,32 @@ function PolymarketLogo() {
 }
 
 function buildHref(url: string | undefined | null, question?: string): string {
-  // Use the stored URL if it looks valid (starts with https://polymarket.com/ and has a path)
-  if (url && url.startsWith('https://polymarket.com/') && url.length > 'https://polymarket.com/'.length) {
+  // The old /event/[slug] URLs no longer work on Polymarket.
+  // Only trust stored URLs that use the new category-based format
+  // (i.e. polymarket.com/ paths that are NOT /event/ or /search).
+  if (url
+    && url.startsWith('https://polymarket.com/')
+    && !url.startsWith('https://polymarket.com/event/')
+    && !url.startsWith('https://polymarket.com/search')
+    && url.length > 'https://polymarket.com/'.length) {
     return url;
   }
-  // Fallback: search Polymarket for the market question
+
+  // Primary fallback: search Polymarket for the market question
   if (question) {
     return `https://polymarket.com/search?q=${encodeURIComponent(question)}`;
   }
+
   return 'https://polymarket.com';
 }
 
 export default function PolymarketButton({ url, question, size = 'sm', className = '' }: PolymarketButtonProps) {
   const href = buildHref(url, question);
+
+  if (typeof window !== 'undefined') {
+    console.log('[PolymarketButton]', { url, question, href });
+  }
+
   const isLg = size === 'lg';
 
   return (
