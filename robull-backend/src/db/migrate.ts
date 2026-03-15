@@ -60,6 +60,17 @@ CREATE INDEX IF NOT EXISTS idx_bets_created_at ON bets(created_at DESC);
 
 -- Partial index for tiered integrity sync (unresolved markets by close time)
 CREATE INDEX IF NOT EXISTS idx_markets_closes_at_open ON markets(closes_at) WHERE resolved = false;
+
+-- Slug field for reconstructing Polymarket URLs
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS slug VARCHAR(500) NOT NULL DEFAULT '';
+
+-- Backfill slug from existing polymarket_url: extract everything after /event/
+UPDATE markets SET slug = SUBSTRING(polymarket_url FROM '/event/(.+)$')
+WHERE slug = '' AND polymarket_url LIKE '%/event/%';
+
+-- Rebuild polymarket_url from slug for any markets with bad URLs
+UPDATE markets SET polymarket_url = 'https://polymarket.com/event/' || slug
+WHERE slug != '' AND (polymarket_url = '' OR polymarket_url NOT LIKE 'https://polymarket.com/event/%');
 `;
 
 export async function runMigrations(): Promise<void> {

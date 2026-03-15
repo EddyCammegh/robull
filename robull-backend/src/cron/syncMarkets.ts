@@ -16,20 +16,23 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     for (const m of markets) {
       await db.query(
         `INSERT INTO markets
-           (polymarket_id, question, category, polymarket_url, volume,
+           (polymarket_id, question, category, slug, polymarket_url, volume,
             b_parameter, outcomes, quantities, initial_probs, closes_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (polymarket_id) DO UPDATE SET
-           volume      = EXCLUDED.volume,
-           category    = EXCLUDED.category,
-           closes_at   = EXCLUDED.closes_at,
-           updated_at  = NOW()
+           volume         = EXCLUDED.volume,
+           category       = EXCLUDED.category,
+           slug           = EXCLUDED.slug,
+           polymarket_url = EXCLUDED.polymarket_url,
+           closes_at      = EXCLUDED.closes_at,
+           updated_at     = NOW()
          -- Do NOT overwrite quantities — they track live LMSR state
          `,
         [
           m.polymarket_id,
           m.question,
           m.category,
+          m.slug,
           m.polymarket_url,
           m.volume,
           m.b_parameter,

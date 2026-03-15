@@ -23,6 +23,7 @@ export interface NormalisedMarket {
   polymarket_id: string;
   question: string;
   category: MarketCategory;
+  slug: string;
   polymarket_url: string;
   volume: number;
   b_parameter: number;
@@ -348,7 +349,8 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
       polymarket_id: m.id,
       question: m.question,
       category: classifyCategory(m.question, m.tags),
-      polymarket_url: `https://polymarket.com/event/${m.slug}`,
+      slug: m.slug,
+      polymarket_url: m.slug ? `https://polymarket.com/event/${m.slug}` : '',
       volume,
       b_parameter: b,
       outcomes,
