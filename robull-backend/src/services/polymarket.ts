@@ -4,6 +4,11 @@ import { computeB, bootstrapQuantities } from './lmsr.js';
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const MIN_VOLUME = Number(process.env.MARKET_MIN_VOLUME ?? 1000);
 
+interface GammaEvent {
+  id: string;
+  slug: string;
+}
+
 interface GammaMarket {
   id: string;
   question: string;
@@ -17,6 +22,7 @@ interface GammaMarket {
   new: boolean;
   tags?: { label: string }[];
   conditionId?: string;
+  events?: GammaEvent[];
 }
 
 export interface NormalisedMarket {
@@ -345,12 +351,16 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
     const b = computeB(volume);
     const quantities = bootstrapQuantities(initialProbs, b);
 
+    // The correct Polymarket URL uses the EVENT slug, not the market slug.
+    // The events array is present in the /markets response.
+    const eventSlug = m.events?.[0]?.slug ?? m.slug;
+
     results.push({
       polymarket_id: m.id,
       question: m.question,
       category: classifyCategory(m.question, m.tags),
-      slug: m.slug,
-      polymarket_url: m.slug ? `https://polymarket.com/event/${m.slug}` : '',
+      slug: eventSlug,
+      polymarket_url: eventSlug ? `https://polymarket.com/event/${eventSlug}` : '',
       volume,
       b_parameter: b,
       outcomes,
