@@ -1,25 +1,11 @@
-import { fetchLiveMarkets } from '@/lib/polymarket';
-import { MOCK_MARKETS, generateBetsForMarket } from '@/lib/mockData';
+import { api } from '@/lib/api';
 import MarketsView from '@/components/MarketsView';
-import type { Market, Bet } from '@/types';
 
-// Re-fetch at most once per hour (Polymarket hourly sync)
-export const revalidate = 3600;
+// Re-fetch every 10 seconds to match backend sync cadence
+export const revalidate = 10;
 
 export default async function MarketsPage() {
-  // Fetch live markets from Polymarket Gamma API; fall back to mock data
-  let markets: Market[] = [];
-  try {
-    markets = await fetchLiveMarkets(5000);
-  } catch {
-    markets = MOCK_MARKETS;
-  }
+  const markets = await api.markets.list();
 
-  // Attach agent bets to each market for the research view
-  const marketsWithBets: (Market & { bets: Bet[] })[] = markets.map((m, i) => ({
-    ...m,
-    bets: generateBetsForMarket(m, 3 + (i % 3)), // 3–5 bets per market
-  }));
-
-  return <MarketsView markets={marketsWithBets} />;
+  return <MarketsView markets={markets} />;
 }

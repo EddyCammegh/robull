@@ -32,26 +32,142 @@ export interface NormalisedMarket {
   closes_at: string | null;
 }
 
+// ─── Sports: checked FIRST to catch team names / match formats before other rules ──
+// "vs." patterns, "win on 2026-", "O/U" lines are strong sports signals.
+const SPORTS_RE = new RegExp([
+  // Leagues & tournaments
+  /\bnba\b/, /\bnfl\b/, /\bnhl\b/, /\bmlb\b/, /\bmls\b/, /\bfifa\b/, /\bepl\b/, /\bucl\b/,
+  /world cup/, /champions league/, /premier league/, /la liga/, /bundesliga/, /serie a/,
+  /ligue 1/, /super bowl/, /playoff/, /championship\b/, /\btournament\b/,
+  /grand slam/, /wimbledon/, /us open/, /french open/, /australian open/,
+  /formula 1/, /\bf1\b/, /\bgolf\b/, /\bpga\b/, /\bmasters\b/, /nascar/,
+  /\bmma\b/, /\bufc\b/, /\bboxing\b/, /\bolympic/, /\bcricket\b/, /\brugby\b/, /\btennis\b/,
+  /carabao cup/, /\bfa cup\b/, /\befl\b/, /league cup/,
+  /promotion/, /relegation/, /\btransfer\b/, /manager sacked/,
+  /match winner/, /season winner/, /top scorer/, /\bmvp\b/, /\bdraft\b/,
+  // Match‑style patterns: "Team vs. Team", "Will <Team> win on <date>"
+  /\bvs\.?\s/, /\bwin on \d{4}/, /\bo\/u\s?\d/,
+  // Specific club / team suffixes that appear in Polymarket questions
+  /\bfc\b/, /\bcf\b/, /\bafc\b/, /\bsc\b.*(?:win|match|season)/,
+  // Well‑known team / league names that don't contain dangerous substrings
+  /nuggets/, /lakers/, /celtics/, /clippers/, /76ers/, /wizards/, /nets\b/,
+  /devils/, /kings\b.*(?:vs|win|match)/, /padres/, /diamondbacks/,
+  /arsenal/, /real madrid/, /manchester/, /liverpool/, /chelsea/, /tottenham/,
+  /barcelona/, /juventus/, /bayern/, /inter miami/, /philadelphia union/,
+  /sunderland/, /hoffenheim/, /hamburger sv/, /sevilla/, /lyon(?:nais)?/,
+  /hellas verona/, /mallorca/, /valencia/, /sporting\b.*(?:win|champion)/,
+  /midtjylland/, /henan/, /getafe/, /genoa/,
+  /alcaraz/, /medvedev/, /bnp paribas open/,
+].map(r => r.source).join('|'), 'i');
+
+const POLITICS_RE = new RegExp([
+  // Institutions & processes
+  /election/, /\bpresident/, /prime minister/, /\bsenator?\b/, /\bcongress/,
+  /parliament/, /\bvote\b/, /\bballot\b/, /\bdemocrat/, /\brepublican/,
+  /political party/, /government/, /\bminister\b/, /\bchancellor\b/,
+  /\bmayor\b/, /\bgovernor\b/, /\bnato\b/, /\bsanctions\b/,
+  /\bceasefire\b/, /\btreaty\b/, /\bdiplomat/, /\bregime\b/, /\bcoup\b/,
+  /\bwar\b/, /\bconflict\b/, /\bgeopolit/,
+  /white house/, /cabinet\b/, /legislation/, /impeach/, /\bveto\b/,
+  /scotus/, /supreme court/,
+  // Countries / regions (geopolitical context)
+  /\bukraine\b/, /\brussia\b/, /\bchina\b/, /\btaiwan\b/, /\biran\b/,
+  /\bisrael\b/, /\bgaza\b/, /\bhamas\b/, /\bcuba\b/, /\bgreenland\b/,
+  // Politician names
+  /\btrump\b/, /\bbiden\b/, /\bharris\b/, /\bobama\b/, /\bclinton\b/,
+  /\bputin\b/, /\bzelensky\b/, /\bxi jinping\b/, /\bmodi\b/, /\bmacron\b/,
+  /\bstarmer\b/, /\bsunak\b/, /\bbadenoch\b/, /\bmerkel\b/, /\bscholz\b/,
+  /\bmeloni\b/, /\berdogan\b/, /\bkhamenei\b/, /\bnetanyahu\b/, /\babbas\b/,
+  /\bmilei\b/, /\blula\b/, /\bbolsonaro\b/, /\btrudeau\b/,
+  /\balbanese\b/, /\bardern\b/, /\bjohnson\b.*(?:prime|politics|elect)/,
+  /\bfarage\b/, /\ble pen\b/, /\borban\b/, /\bkim jong un\b/,
+  /\bmaduro\b/, /\bcastro\b/, /\blukashenko\b/, /\bmbs\b/, /\bbin salman\b/,
+  /\bsisi\b/, /\bkagame\b/, /\bramaphosa\b/, /\bpetro\b.*(?:leader|colombia|president|out)/,
+  /van duyne/,
+  /balance of power/,
+].map(r => r.source).join('|'), 'i');
+
+const CRYPTO_RE = new RegExp([
+  /\bbitcoin\b/, /\bbtc\b/, /\bethereum\b/, /\bcrypto\b/, /\bblockchain\b/,
+  /\bdefi\b/, /\bnft\b/, /\bstablecoin\b/, /\busdc\b/, /\busdt\b/, /\btether\b/,
+  /\bcoinbase\b/, /\bbinance\b/,
+  /\baltcoin\b/, /\bmemecoin\b/, /\bairdrop\b/, /\bwallet\b/, /\bweb3\b/,
+  /\bon-chain\b/, /\bl1\b/, /\bl2\b/, /\bprotocol\b/,
+  /\bfdv\b/, /launch token/, /token launch/,
+  /\bsolana\b/, /\bxrp\b/, /\bripple\b/, /\bcardano\b/,
+  /\bavalanche\b/, /\bavax\b/, /\bpolygon\b/, /\bmatic\b/,
+  /\bchainlink\b/, /\buniswap\b/, /\baave\b/,
+  /\bdogecoin\b/, /\bdoge\b/, /\bshiba\b/, /\bbnb\b/,
+  /\bkraken\b/, /\bbybit\b/, /\bmicrostrategy\b/, /\bbitboy\b/,
+  /\bmegaeth\b/, /\bedgex\b/, /predict\.fun/,
+  // "market cap" only in crypto context (near token-like words)
+  /market cap/,
+].map(r => r.source).join('|'), 'i');
+
+const MACRO_RE = new RegExp([
+  /federal reserve/, /\bthe fed\b/, /\bfed\b.*(?:rate|cut|hike|meeting|funds|policy)/,
+  /interest rate/, /\binflation\b/, /\bcpi\b/, /\bgdp\b/, /\brecession\b/,
+  /\bunemployment\b/, /\bpowell\b/, /\bfomc\b/,
+  /\btreasury\b/, /bond yield/, /\bs&p\b/, /\bnasdaq\b/, /dow jones/,
+  /stock market/, /\bipo\b/, /\bearnings\b/,
+  /\btariff/, /trade war/, /\bdeficit\b/, /debt ceiling/,
+  /\bimf\b/, /world bank/, /monetary policy/, /\bfiscal\b/,
+  /\boil price\b/, /\bcrude oil\b/, /\bcrude\b.*\$/, /\bgold price\b/, /\bcommodity\b/,
+  /\bmsci\b/, /\bdelisted\b/,
+].map(r => r.source).join('|'), 'i');
+
+const AITECH_RE = new RegExp([
+  /artificial intelligence/,
+  /\bopenai\b/, /\bchatgpt\b/, /\bgpt[-‑]?\d/, /\banthropic\b/, /\bclaude\b/,
+  /\bgemini\b.*(?:ai|model|google)/, /\bllm\b/, /large language model/,
+  /machine learning/, /deep learning/, /neural network/, /model release/,
+  /\bnvidia\b/, /semiconductor/,
+  /\btesla\b/, /\bspacex\b/, /\belon musk\b/, /\bsam altman\b/,
+  /tech company/, /silicon valley/,
+  /\brobotics\b/, /\bautonomous\b/, /self[- ]driving/,
+  /\bgrok\b/, /\bxai\b/, /\bmistral\b/, /\bperplexity\b/, /\bcursor\b/,
+  /\bdeepseek\b/, /hugging face/, /\bagentic\b/,
+  /\blovable\b/,
+].map(r => r.source).join('|'), 'i');
+
+// Specific \bai\b check — only match when it looks like "artificial intelligence" context,
+// not words like "said", "aimed", etc. Require standalone "AI" (uppercase) or surrounded by
+// tech-adjacent words.
+function looksLikeAI(question: string): boolean {
+  // Uppercase "AI" as a standalone word is almost always artificial intelligence
+  if (/\bAI\b/.test(question)) return true;
+  return false;
+}
+
 function classifyCategory(question: string, tags?: { label: string }[]): MarketCategory {
   const tagLabels = (tags ?? []).map((t) => t.label.toLowerCase());
-  const q = question.toLowerCase();
 
-  if (tagLabels.some((l) => l.includes('crypto') || l.includes('bitcoin') || l.includes('ethereum') || l.includes('solana') || l.includes('blockchain') || l.includes('token') || l.includes('defi')) ||
-      q.match(/bitcoin|btc|ethereum|eth\b|crypto|defi|nft|solana|sol\b|blockchain|token|altcoin|stablecoin|usdc|usdt|tether|binance|bnb|xrp|ripple|cardano|ada\b|avalanche|avax|polygon|matic|chainlink|link\b|uniswap|aave|doge|dogecoin|shiba|pepe\b|memecoin|coinbase|kraken|bybit/)) return 'CRYPTO';
-  if (tagLabels.some((l) => l.includes('politics') || l.includes('election') || l.includes('president') || l.includes('parliament') || l.includes('government')) ||
-      q.match(/election|president|senate|congress|prime minister|prime-minister|vote|ballot|democrat|republican|parliament|minister|chancellor|mayor|governor|political party|white house|cabinet|legislation|impeach|veto|tariff policy|nato|geopolit|war\b|ukraine|russia|china|taiwan|iran|israel|hamas|sanctions/)) return 'POLITICS';
-  if (tagLabels.some((l) => l.includes('macro') || l.includes('economics') || l.includes('economy') || l.includes('fed') || l.includes('finance')) ||
-      q.match(/\bfed\b|federal reserve|interest rate|inflation|gdp|recession|unemployment|powell|fomc|cpi|pce|treasury|bond yield|s&p|nasdaq|dow jones|stock market|ipo|earnings|tariff|trade war|deficit|debt ceiling|imf|world bank|monetary policy|fiscal/)) return 'MACRO';
-  if (tagLabels.some((l) => l.includes('sports') || l.includes('nba') || l.includes('nfl') || l.includes('soccer') || l.includes('football') || l.includes('baseball') || l.includes('hockey') || l.includes('tennis') || l.includes('golf')) ||
-      q.match(/\bnba\b|\bnfl\b|\bnhl\b|\bmlb\b|\bfifa\b|world cup|champions league|premier league|la liga|bundesliga|serie a|super bowl|playoff|championship|tournament|grand slam|wimbledon|us open|french open|australian open|formula 1|\bf1\b|golf|pga|masters|nascar|mma|\bufc\b|boxing|wrestling|olympic|athlete|quarterback|touchdown|homerun|hat.trick|match winner|season winner/)) return 'SPORTS';
-  if (tagLabels.some((l) => l.includes('ai') || l.includes('artificial intelligence') || l.includes('tech') || l.includes('technology') || l.includes('software') || l.includes('machine learning')) ||
-      q.match(/\bai\b|artificial intelligence|openai|chatgpt|\bgpt\b|anthropic|\bclaude\b|gemini|\bllm\b|large language model|machine learning|deep learning|neural network|model release|model launch|agent\b|robotics|\bnvidia\b|semiconductor|chip\b|apple|google|meta\b|microsoft|amazon|tesla|spacex|elon musk|sam altman|tech company|silicon valley|startup|software|app store|smartphone|iphone|android/)) return 'AI/TECH';
+  // ── Sports first: catches team names, "vs.", "win on <date>" before other rules
+  // can misfire on substrings like "eth" in "Beth", "sol" in "Solana" etc.
+  if (tagLabels.some((l) => /sport|nba|nfl|soccer|football|baseball|hockey|tennis|golf|cricket|rugby/.test(l)) ||
+      SPORTS_RE.test(question)) return 'SPORTS';
+
+  // ── Politics: geopolitical events, elections, named politicians
+  if (tagLabels.some((l) => /politic|election|president|parliament|government/.test(l)) ||
+      POLITICS_RE.test(question)) return 'POLITICS';
+
+  // ── Crypto
+  if (tagLabels.some((l) => /crypto|bitcoin|ethereum|solana|blockchain|defi/.test(l)) ||
+      CRYPTO_RE.test(question)) return 'CRYPTO';
+
+  // ── Macro / economics
+  if (tagLabels.some((l) => /macro|econom|fed\b|finance/.test(l)) ||
+      MACRO_RE.test(question)) return 'MACRO';
+
+  // ── AI / Tech
+  if (tagLabels.some((l) => /\bai\b|artificial intelligence|tech|software|machine learning/.test(l)) ||
+      AITECH_RE.test(question) || looksLikeAI(question)) return 'AI/TECH';
 
   return 'OTHER';
 }
 
 const PAGE_SIZE = 100;
-const TARGET_MARKETS = 500;
+const TARGET_MARKETS = 2000;
 
 export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
   const allMarkets: GammaMarket[] = [];

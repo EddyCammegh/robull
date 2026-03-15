@@ -16,6 +16,7 @@ export async function syncMarkets(db: Pool): Promise<void> {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (polymarket_id) DO UPDATE SET
            volume      = EXCLUDED.volume,
+           category    = EXCLUDED.category,
            closes_at   = EXCLUDED.closes_at,
            updated_at  = NOW()
          -- Do NOT overwrite quantities — they track live LMSR state

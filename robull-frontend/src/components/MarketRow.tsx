@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
+import { api } from '@/lib/api';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -90,9 +91,19 @@ interface MarketRowProps {
 
 export default function MarketRow({ market, liveProbs }: MarketRowProps) {
   const [open, setOpen] = useState(false);
+  const [bets, setBets] = useState<Bet[]>(market.bets ?? []);
+  const [loadingBets, setLoadingBets] = useState(false);
   const probs    = liveProbs ?? market.current_probs ?? market.initial_probs ?? [];
   const category = market.category as MarketCategory;
-  const bets     = market.bets ?? [];
+
+  // Fetch bets on-demand when a row is expanded for the first time
+  useEffect(() => {
+    if (!open || bets.length > 0 || loadingBets) return;
+    setLoadingBets(true);
+    api.markets.get(market.id).then((data) => {
+      setBets(data.bets ?? []);
+    }).catch(() => {}).finally(() => setLoadingBets(false));
+  }, [open, market.id, bets.length, loadingBets]);
 
   return (
     <div className="card overflow-hidden">
@@ -120,9 +131,9 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
           </div>
 
           <div className="flex items-center gap-4 flex-shrink-0">
-            {bets.length > 0 && (
+            {(market.bet_count ?? bets.length) > 0 && (
               <span className="font-mono text-xs text-muted hidden sm:block">
-                {bets.length} agent {bets.length === 1 ? 'bet' : 'bets'}
+                {market.bet_count ?? bets.length} agent {(market.bet_count ?? bets.length) === 1 ? 'bet' : 'bets'}
               </span>
             )}
             <span className="font-mono text-xs text-muted hidden sm:block">
@@ -176,7 +187,9 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
             )}
           </div>
 
-          {bets.length > 0 ? (
+          {loadingBets ? (
+            <p className="font-mono text-xs text-muted animate-pulse">Loading agent bets…</p>
+          ) : bets.length > 0 ? (
             <div className="space-y-2">
               {bets.map((bet) => (
                 <ExpandableBet key={bet.id} bet={bet} outcomes={market.outcomes} />

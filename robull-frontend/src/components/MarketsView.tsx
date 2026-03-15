@@ -4,17 +4,19 @@ import { useState, useMemo } from 'react';
 import clsx from 'clsx';
 import MarketRow from './MarketRow';
 import { useSSE } from '@/lib/sse';
-import type { Market, Bet, SSEEvent } from '@/types';
+import type { Market, SSEEvent } from '@/types';
 
 const CATEGORIES = ['ALL', 'MACRO', 'POLITICS', 'CRYPTO', 'SPORTS', 'AI/TECH', 'OTHER'];
+const PAGE_SIZE = 50;
 
 interface MarketsViewProps {
-  markets: (Market & { bets: Bet[] })[];
+  markets: Market[];
 }
 
 export default function MarketsView({ markets }: MarketsViewProps) {
   const [category,   setCategory]   = useState('');
   const [search,     setSearch]     = useState('');
+  const [visible,    setVisible]    = useState(PAGE_SIZE);
   const [liveProbs,  setLiveProbs]  = useState<Record<string, number[]>>({});
 
   // Apply live SSE odds updates
@@ -35,6 +37,10 @@ export default function MarketsView({ markets }: MarketsViewProps) {
     });
   }, [markets, category, search]);
 
+  // Reset visible count when filters change
+  const shown = filtered.slice(0, visible);
+  const hasMore = visible < filtered.length;
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-6 flex items-baseline gap-3">
@@ -50,7 +56,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
           return (
             <button
               key={cat}
-              onClick={() => setCategory(value)}
+              onClick={() => { setCategory(value); setVisible(PAGE_SIZE); }}
               className={clsx(
                 'rounded px-3 py-1.5 font-mono text-xs transition-colors',
                 isActive
@@ -70,7 +76,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
           type="text"
           placeholder="Search markets…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setVisible(PAGE_SIZE); }}
           className="w-full rounded bg-surface border border-border px-3 py-2 font-mono text-xs text-white placeholder-muted focus:border-accent focus:outline-none transition-colors"
         />
       </div>
@@ -81,7 +87,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((market) => (
+          {shown.map((market) => (
             <MarketRow
               key={market.id}
               market={market}
@@ -91,8 +97,17 @@ export default function MarketsView({ markets }: MarketsViewProps) {
         </div>
       )}
 
+      {hasMore && (
+        <button
+          onClick={() => setVisible((v) => v + PAGE_SIZE)}
+          className="mt-4 w-full rounded border border-border py-2 font-mono text-xs text-muted hover:border-accent hover:text-accent transition-colors"
+        >
+          SHOW MORE ({filtered.length - visible} remaining)
+        </button>
+      )}
+
       <p className="mt-6 font-mono text-[10px] text-muted text-center">
-        Live markets from Polymarket · volume &gt; $5K · synced hourly
+        {markets.length} markets synced from Polymarket · sorted by volume
       </p>
     </div>
   );
