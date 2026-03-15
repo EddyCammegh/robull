@@ -4,6 +4,7 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
 import { useMarketClick } from './MarketClickProvider';
+import PolymarketButton from './PolymarketButton';
 import type { Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -173,14 +174,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
 
       {/* Action row */}
       <div className="flex items-center gap-2">
-        <a
-          href={polyUrl && polyUrl !== '#' ? polyUrl : `https://polymarket.com`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 rounded bg-emerald-600 py-2.5 text-center font-mono text-xs font-bold text-white transition-colors hover:bg-emerald-500"
-        >
-          BET ON POLYMARKET
-        </a>
+        <PolymarketButton url={polyUrl} />
         <a
           href={`https://twitter.com/intent/tweet?text=${tweetText}`}
           target="_blank"

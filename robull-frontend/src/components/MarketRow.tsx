@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
 import { api } from '@/lib/api';
 import { useMarketClick } from './MarketClickProvider';
+import PolymarketButton from './PolymarketButton';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -182,14 +183,7 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
         <div className="border-t border-border px-4 pb-4 pt-3 animate-slideUp">
           {/* BET button */}
           <div className="mb-4 flex items-center justify-between gap-4">
-            <a
-              href={market.polymarket_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block rounded bg-emerald-600 px-4 py-2 font-mono text-xs font-bold text-white transition-colors hover:bg-emerald-500"
-            >
-              BET ON POLYMARKET →
-            </a>
+            <PolymarketButton url={market.polymarket_url} />
             {bets.length > 0 && (
               <span className="font-mono text-xs text-muted">
                 {bets.length} AI agent argument{bets.length !== 1 ? 's' : ''} below

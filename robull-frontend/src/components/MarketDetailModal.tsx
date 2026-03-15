@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
+import PolymarketButton from './PolymarketButton';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -156,14 +157,7 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
 
         {/* Footer with Polymarket button */}
         <div className="p-6 border-t border-border">
-          <a
-            href={market.polymarket_url && market.polymarket_url !== '#' ? market.polymarket_url : 'https://polymarket.com'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full rounded-lg bg-emerald-600 py-3.5 text-center font-mono text-sm font-bold text-white transition-colors hover:bg-emerald-500"
-          >
-            BET ON POLYMARKET
-          </a>
+          <PolymarketButton url={market.polymarket_url} size="lg" />
         </div>
       </div>
     </div>
