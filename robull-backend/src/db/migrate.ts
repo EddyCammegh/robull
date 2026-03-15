@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS bets (
 CREATE INDEX IF NOT EXISTS idx_bets_agent_id   ON bets(agent_id);
 CREATE INDEX IF NOT EXISTS idx_bets_market_id  ON bets(market_id);
 CREATE INDEX IF NOT EXISTS idx_bets_created_at ON bets(created_at DESC);
+
+-- Partial index for tiered integrity sync (unresolved markets by close time)
+CREATE INDEX IF NOT EXISTS idx_markets_closes_at_open ON markets(closes_at) WHERE resolved = false;
 `;
 
 export async function runMigrations(): Promise<void> {

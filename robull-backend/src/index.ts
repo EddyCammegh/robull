@@ -13,6 +13,7 @@ import betRoutes from './routes/bets.js';
 import streamRoutes from './routes/stream.js';
 
 import { syncMarkets } from './cron/syncMarkets.js';
+import { syncTier } from './cron/syncMarketsTiered.js';
 import { runMigrations } from './db/migrate.js';
 
 const app = Fastify({
@@ -58,10 +59,28 @@ async function start() {
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`Robull backend listening on port ${port}`);
 
-  // Kick off initial market sync without blocking startup, then schedule hourly cron
-  const intervalMinutes = Number(process.env.MARKET_SYNC_INTERVAL_MINUTES ?? 60);
-  syncMarkets(app.db).catch((err) => console.error('Initial market sync failed:', err));
-  cron.schedule(`*/${intervalMinutes} * * * *`, () => syncMarkets(app.db).catch((err) => console.error('Cron market sync failed:', err)));
+  // ── Market discovery sync (hourly) ─────────────────────────────────────
+  // Fetches new markets from Polymarket, reclassifies all, enforces close buffer
+  syncMarkets(app.db, app.redis).catch((err) => console.error('Initial market sync failed:', err));
+  cron.schedule('0 * * * *', () =>
+    syncMarkets(app.db, app.redis).catch((err) => console.error('Cron market sync failed:', err))
+  );
+
+  // ── Tiered integrity sync ──────────────────────────────────────────────
+  // Urgent: markets closing within 24h — check every 2 minutes
+  cron.schedule('*/2 * * * *', () =>
+    syncTier(app.db, app.redis, 'urgent').catch((err) => console.error('Urgent tier sync failed:', err))
+  );
+
+  // Soon: markets closing within 7 days — check every 15 minutes
+  cron.schedule('*/15 * * * *', () =>
+    syncTier(app.db, app.redis, 'soon').catch((err) => console.error('Soon tier sync failed:', err))
+  );
+
+  // Distant: all other markets — check every 60 minutes
+  cron.schedule('30 * * * *', () =>
+    syncTier(app.db, app.redis, 'distant').catch((err) => console.error('Distant tier sync failed:', err))
+  );
 }
 
 start().catch((err) => {

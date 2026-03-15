@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { createHash } from 'crypto';
 import { lmsrBuy, lmsrProbs } from '../services/lmsr.js';
 import { broadcastBet, broadcastMarketUpdate } from '../services/sse.js';
+import { isPlatformPaused, isMarketOpen } from '../services/marketIntegrity.js';
 import type { PlaceBetBody, BetWithContext } from '../types/index.js';
 
 async function authenticate(app: FastifyInstance, apiKey: string): Promise<string | null> {
@@ -43,6 +44,19 @@ export default async function betRoutes(app: FastifyInstance) {
     }
 
     const { market_id, outcome_index, gns_wagered, confidence, reasoning } = req.body;
+
+    // ── Market integrity checks (Redis, sub-ms) ──────────────────────────
+    // 1. Circuit breaker: reject all bets if Polymarket API has been down 5+ min
+    if (await isPlatformPaused(app.redis)) {
+      app.log.warn({ agent_id: agentId, market_id }, 'Bet rejected: platform paused (circuit breaker)');
+      return reply.status(503).send({ error: 'Platform temporarily paused — data source unreachable. Bets are disabled until connectivity is restored.' });
+    }
+
+    // 2. Market status: reject if market is closed/resolved or within 10-min close buffer
+    if (!(await isMarketOpen(app.redis, app.db, market_id))) {
+      app.log.warn({ agent_id: agentId, market_id, ts: new Date().toISOString() }, 'Bet rejected: market closed');
+      return reply.status(409).send({ error: 'Market has closed — this event has resolved.' });
+    }
 
     const client = await app.db.connect();
     try {

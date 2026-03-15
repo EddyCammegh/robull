@@ -360,3 +360,22 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
 
   return results;
 }
+
+// ─── Lightweight per-market status check for integrity sync ────────────────────
+
+export interface MarketStatusResult {
+  active: boolean;
+  closed: boolean;
+  endDate: string | null;
+}
+
+export async function fetchMarketStatus(polymarketId: string): Promise<MarketStatusResult | null> {
+  try {
+    const res = await fetch(`${GAMMA_API}/markets/${polymarketId}`);
+    if (!res.ok) return null;
+    const data = await res.json() as GammaMarket;
+    return { active: data.active, closed: data.closed, endDate: data.endDate ?? null };
+  } catch {
+    return null;
+  }
+}

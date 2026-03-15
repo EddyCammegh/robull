@@ -1,12 +1,17 @@
 import type { Pool } from 'pg';
+import type Redis from 'ioredis';
 import { fetchPolymarkets, classifyCategory } from '../services/polymarket.js';
+import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
 
-export async function syncMarkets(db: Pool): Promise<void> {
+export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
   console.log('[cron] Syncing markets from Polymarket...');
   let synced = 0;
 
   try {
     const markets = await fetchPolymarkets();
+
+    // API fetch succeeded — clear circuit breaker
+    await recordApiSuccess(redis);
 
     for (const m of markets) {
       await db.query(
@@ -39,8 +44,7 @@ export async function syncMarkets(db: Pool): Promise<void> {
 
     console.log(`[cron] Synced ${synced} markets from API.`);
 
-    // Reclassify ALL markets in DB using the latest classification rules.
-    // This catches markets that the API no longer returns (closed, inactive, etc.)
+    // Reclassify ALL markets in DB using the latest classification rules
     const { rows } = await db.query('SELECT id, question, category FROM markets');
     let reclassified = 0;
     for (const row of rows) {
@@ -53,7 +57,15 @@ export async function syncMarkets(db: Pool): Promise<void> {
     if (reclassified > 0) {
       console.log(`[cron] Reclassified ${reclassified} markets.`);
     }
+
+    // Enforce close buffer — resolve markets within 10 min of closes_at
+    const buffered = await enforceCloseBuffer(redis, db);
+    if (buffered > 0) {
+      console.log(`[cron] Close buffer resolved ${buffered} markets.`);
+    }
   } catch (err) {
+    // API fetch failed — record failure for circuit breaker
+    await recordApiFailure(redis).catch(() => {});
     console.error('[cron] Market sync failed:', err);
   }
 }
