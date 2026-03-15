@@ -56,6 +56,7 @@ body {
 .cat-CRYPTO   { background: #2a2a1a; color: #facc15; border-color: #854d0e; }
 .cat-SPORTS   { background: #1a1a2a; color: #60a5fa; border-color: #1e40af; }
 .cat-AITECH   { background: #2a1a1a; color: #ff4400; border-color: #7f1d1d; }
+.cat-ENTERTAINMENT { background: #2a1a2a; color: #f472b6; border-color: #9d174d; }
 .cat-OTHER    { background: #1e1e1e; color: #9ca3af; border-color: #374151; }
 
 /* Animate new bet cards */

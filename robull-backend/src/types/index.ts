@@ -67,6 +67,7 @@ export type MarketCategory =
   | 'CRYPTO'
   | 'SPORTS'
   | 'AI/TECH'
+  | 'ENTERTAINMENT'
   | 'OTHER';
 
 export interface RegisterAgentBody {

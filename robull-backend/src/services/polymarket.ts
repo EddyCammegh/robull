@@ -32,79 +32,169 @@ export interface NormalisedMarket {
   closes_at: string | null;
 }
 
-// ─── Sports: checked FIRST to catch team names / match formats before other rules ──
-// "vs." patterns, "win on 2026-", "O/U" lines are strong sports signals.
-const SPORTS_RE = new RegExp([
+// ─── Helper: build a case-insensitive regex from an array of patterns ──────────
+function re(patterns: RegExp[]): RegExp {
+  return new RegExp(patterns.map(r => r.source).join('|'), 'i');
+}
+
+// ─── SPORTS ────────────────────────────────────────────────────────────────────
+// Checked FIRST — catches team names, "vs.", "win on <date>" before other rules
+// can misfire on substrings like "eth" in "Beth".
+const SPORTS_RE = re([
   // Leagues & tournaments
   /\bnba\b/, /\bnfl\b/, /\bnhl\b/, /\bmlb\b/, /\bmls\b/, /\bfifa\b/, /\bepl\b/, /\bucl\b/,
+  /\bwbc\b/, /\bafl\b/, /\bwnba\b/, /\blpga\b/, /\batp\b/, /\bwta\b/, /\bipl\b/,
   /world cup/, /champions league/, /premier league/, /la liga/, /bundesliga/, /serie a/,
-  /ligue 1/, /super bowl/, /playoff/, /championship\b/, /\btournament\b/,
+  /ligue 1/, /super bowl/, /playoff/, /\bchampionship\b/, /\btournament\b/,
   /grand slam/, /wimbledon/, /us open/, /french open/, /australian open/,
-  /formula 1/, /\bf1\b/, /\bgolf\b/, /\bpga\b/, /\bmasters\b/, /nascar/,
+  /formula 1/, /\bf1 drivers\b/, /\bgolf\b/, /\bpga\b/, /\bmasters tournament\b/,
+  /nascar/, /\bindycar\b/, /\bmoto\s?gp\b/,
   /\bmma\b/, /\bufc\b/, /\bboxing\b/, /\bolympic/, /\bcricket\b/, /\brugby\b/, /\btennis\b/,
-  /carabao cup/, /\bfa cup\b/, /\befl\b/, /league cup/,
+  /carabao cup/, /\bfa cup\b/, /\befl\b/, /league cup/, /copa america/, /copa libertadores/,
+  /europa league/, /conference league/, /nations league/,
   /promotion/, /relegation/, /\btransfer\b/, /manager sacked/,
-  /match winner/, /season winner/, /top scorer/, /\bmvp\b/, /\bdraft\b/,
-  // Match‑style patterns: "Team vs. Team", "Will <Team> win on <date>"
-  /\bvs\.?\s/, /\bwin on \d{4}/, /\bo\/u\s?\d/,
-  // Specific club / team suffixes that appear in Polymarket questions
+  /match winner/, /season winner/, /top scorer/, /\bmvp\b/, /\bdraft pick\b/,
+  /golden boot/, /ballon d'or/, /heisman/,
+  // Match-style patterns: "Team vs. Team", "Will <Team> win on <date>", O/U lines, spreads
+  /\bvs\.?\s/, /\bwin on \d{4}/, /\bo\/u\s?\d/, /\bspread\b/, /\bmoneyline\b/,
+  /\bover\s?\d+\.?\d*\s*(?:goals|points|runs|sets)/, /\bunder\s?\d+\.?\d*\s*(?:goals|points|runs|sets)/,
+  /\b\(bo\d\)\b/,  // BO3, BO5 — esports / tennis
+  // Club suffixes — very strong sports signal
   /\bfc\b/, /\bcf\b/, /\bafc\b/, /\bsc\b.*(?:win|match|season)/,
-  // Well‑known team / league names that don't contain dangerous substrings
-  /nuggets/, /lakers/, /celtics/, /clippers/, /76ers/, /wizards/, /nets\b/,
-  /devils/, /kings\b.*(?:vs|win|match)/, /padres/, /diamondbacks/,
+  /\bunited\b.*(?:win|match|vs)/, /\bcity\b.*(?:win|match|vs|fc)/,
+  /\brovers?\b.*(?:win|match|vs)/, /\brangers?\b.*(?:win|match|vs)/,
+  // NBA teams
+  /nuggets/, /lakers/, /celtics/, /clippers/, /76ers/, /wizards/,
+  /\bnets\b.*(?:vs|win)/, /cavaliers/, /warriors/, /rockets/, /spurs\b.*(?:vs|win|nba)/,
+  /bucks\b.*(?:vs|win|nba)/, /raptors/, /grizzlies/, /pelicans/, /timberwolves/,
+  /thunder\b.*(?:vs|win|nba)/, /mavericks/, /pacers/, /hornets/, /pistons/, /hawks\b.*(?:vs|win|nba)/,
+  /heat\b.*(?:vs|win|nba)/, /magic\b.*(?:vs|win|nba)/, /knicks/, /suns\b.*(?:vs|win|nba)/,
+  /blazers/, /jazz\b.*(?:vs|win|nba)/,
+  // NHL teams
+  /\bdevils\b/, /\bsharks\b/, /\bflyers\b/, /\bbruins\b/, /\bcapitals\b/,
+  /\bcanadiens\b/, /\bblue jackets\b/, /\bpenguins\b/, /\bred wings\b/,
+  /\bblackhawks\b/, /\bpanthers\b.*(?:vs|win|nhl)/, /\blightning\b/,
+  /\bmaple leafs\b/, /\bcanucks\b/, /\boilers\b/, /\bflames\b/, /\bstars\b.*(?:vs|win|nhl)/,
+  /\bkraken\b.*(?:vs|win|nhl)/, /\bhurricanes\b.*(?:vs|win|nhl)/,
+  /\bavalanche\b.*(?:vs|win|nhl)/, /\bpredators\b/, /\bsabres\b/, /\bsenators\b.*(?:vs|win|nhl)/,
+  /\bislanders\b/, /\bwild\b.*(?:vs|win|nhl)/,
+  // MLB teams
+  /padres/, /diamondbacks/, /\byankees\b/, /\bred sox\b/, /\bdodgers\b/, /\bmets\b.*(?:vs|win|mlb)/,
+  /\bcubs\b/, /\bastros\b/, /\bbraves\b.*(?:vs|win|mlb)/, /\bphillies\b/, /\borioles\b/,
+  /\bguardians\b/, /\broyals\b/, /\btwins\b.*(?:vs|win|mlb)/, /\bgiants\b.*(?:vs|win|mlb|sf)/,
+  /\btigers\b.*(?:vs|win|mlb)/, /\bnationals\b.*(?:vs|win|mlb)/,
+  /\bwhite sox\b/, /\bblue jays\b/, /\bcardinals\b.*(?:vs|win|mlb)/, /\bmariners\b/, /\bpirates\b.*(?:vs|win)/,
+  /\brays\b.*(?:vs|win|mlb)/, /\bangels\b.*(?:vs|win|mlb)/, /\brewers\b/, /\breds\b.*(?:vs|win|mlb)/,
+  /\brockies\b/, /\bathletics\b/,
+  // NFL teams
+  /\bchiefs\b/, /\beagles\b.*(?:vs|win|nfl)/, /\bpackers\b/, /\bcowboys\b/,
+  /\b49ers\b/, /\bbills\b.*(?:vs|win|nfl)/, /\bravens\b/, /\blions\b.*(?:vs|win|nfl)/,
+  /\bdolphins\b/, /\bchargers\b/, /\bsteelers\b/, /\bbears\b.*(?:vs|win|nfl)/,
+  /\btexans\b.*(?:vs|win|nfl)/, /\bbengals\b/, /\bcommanders\b/, /\bjaguars\b/,
+  /\bcolts\b/, /\bvikings\b/, /\bsaints\b.*(?:vs|win|nfl)/, /\bfalcons\b/,
+  /\bbroncos\b/, /\bseahawks\b/, /\bcardinals\b.*(?:vs|win|nfl)/,
+  /\braiders\b/, /\btitans\b.*(?:vs|win|nfl)/, /\bpatriots\b/,
+  // European football clubs
   /arsenal/, /real madrid/, /manchester/, /liverpool/, /chelsea/, /tottenham/,
   /barcelona/, /juventus/, /bayern/, /inter miami/, /philadelphia union/,
   /sunderland/, /hoffenheim/, /hamburger sv/, /sevilla/, /lyon(?:nais)?/,
   /hellas verona/, /mallorca/, /valencia/, /sporting\b.*(?:win|champion)/,
-  /midtjylland/, /henan/, /getafe/, /genoa/,
-  /alcaraz/, /medvedev/, /bnp paribas open/,
-].map(r => r.source).join('|'), 'i');
+  /midtjylland/, /henan/, /getafe/, /genoa/, /crystal palace/, /leeds united/,
+  /atletico|atlético/, /napoli/, /lazio/, /roma\b.*(?:vs|win|serie)/, /fiorentina/,
+  /dortmund/, /leverkusen/, /wolfsburg/, /gladbach/, /freiburg/,
+  /marseille/, /monaco\b.*(?:vs|win|ligue)/, /lille/, /rennes/, /strasbourg/,
+  /psv/, /ajax/, /feyenoord/, /benfica/, /porto\b.*(?:vs|win|champion)/,
+  /galatasaray/, /fenerbahce|fenerbahçe/, /besiktas|beşiktaş/,
+  /celtic\b.*(?:vs|win|champion|league)/, /rangers\b.*(?:vs|win|champion|league)/,
+  /everton/, /west ham/, /wolves\b.*(?:vs|win|premier)/, /nottingham/,
+  /bournemouth/, /fulham/, /brentford/, /brighton/, /aston villa/, /leicester/,
+  /southampton/, /ipswich/, /newcastle/,
+  // Tennis / golf / F1 player names
+  /alcaraz/, /medvedev/, /djokovic/, /sinner/, /\bnadal\b/, /\bfederer\b/,
+  /swiatek|świątek/, /\bgauff\b/, /sabalenka/, /schauffele/, /\brory\b.*(?:mcilroy|golf|masters)/,
+  /verstappen/, /\bnorris\b.*(?:f1|driver|mclaren)/, /\bhamilton\b.*(?:f1|driver|mercedes)/,
+  /colapinto/, /\bleclerc\b/, /\bpiastri\b/, /\brussell\b.*(?:f1|driver|mercedes)/,
+  /bnp paribas open/, /indian wells/, /monte carlo masters/, /miami open/,
+  // Esports
+  /counter-strike/, /\bcsgo\b/, /\bcs2\b/, /\bdota\s?2\b/, /\bvalorant\b/,
+  /\bleague of legends\b/, /\blol\b.*(?:world|champion|esport)/, /\besport/,
+  /natus vincere/, /\bnavi\b.*(?:vs|esport)/, /\bastralis\b/, /\bfut esports\b/,
+  /aurora gaming/, /team liquid/, /\bfnatic\b/, /\bg2\b.*(?:vs|esport)/,
+  /\bfaze\b.*(?:vs|esport|clan)/, /\bc9\b.*(?:vs|esport)/, /\bcloud9\b/,
+  /betboom/, /\beg\b.*(?:vs|esport|dota)/, /\bog\b.*(?:vs|esport|dota)/,
+  /\besl\b.*(?:pro|league)/, /\bpgl\b.*(?:major|tournament)/,
+  /\b\(bo3\)/, /\b\(bo5\)/,
+  // WBC / international baseball
+  /\bfinal stage\b.*(?:japan|venezuela|usa|korea|cuba|dominican)/,
+]);
 
-const POLITICS_RE = new RegExp([
+// ─── POLITICS ──────────────────────────────────────────────────────────────────
+const POLITICS_RE = re([
   // Institutions & processes
-  /election/, /\bpresident/, /prime minister/, /\bsenator?\b/, /\bcongress/,
+  /\belection\b/, /\bpresident/, /prime minister/, /\bsenator?\b/, /\bcongress/,
   /parliament/, /\bvote\b/, /\bballot\b/, /\bdemocrat/, /\brepublican/,
-  /political party/, /government/, /\bminister\b/, /\bchancellor\b/,
+  /political party/, /\bgovernment\b/, /\bminister\b/, /\bchancellor\b/,
   /\bmayor\b/, /\bgovernor\b/, /\bnato\b/, /\bsanctions\b/,
   /\bceasefire\b/, /\btreaty\b/, /\bdiplomat/, /\bregime\b/, /\bcoup\b/,
-  /\bwar\b/, /\bconflict\b/, /\bgeopolit/,
-  /white house/, /cabinet\b/, /legislation/, /impeach/, /\bveto\b/,
-  /scotus/, /supreme court/,
+  /\bwar\b/, /\bconflict\b/, /\bgeopolit/, /\bmilitary\b.*(?:strike|action|force|operation)/,
+  /white house/, /\bcabinet\b/, /legislation/, /impeach/, /\bveto\b/,
+  /\bscotus\b/, /supreme court/,
+  /\bdhs\b/, /\bcia\b/, /\bfbi\b/, /\bnsa\b/,
+  /\binvasion\b/, /\bannex/, /\boccup(?:y|ation)\b/, /\bembargo\b/,
+  /\brefugee\b/, /\basylum\b/, /\bdeport/, /\bimmigration\b/,
+  /\bprimary\b.*(?:win|election|republican|democrat)/,
+  /leadership change/, /\bleader of\b/,
   // Countries / regions (geopolitical context)
   /\bukraine\b/, /\brussia\b/, /\bchina\b/, /\btaiwan\b/, /\biran\b/,
   /\bisrael\b/, /\bgaza\b/, /\bhamas\b/, /\bcuba\b/, /\bgreenland\b/,
-  // Politician names
+  /\bnorth korea\b/, /\bsyria\b/, /\byemen\b/, /\bvenezuela\b/,
+  /\bhouthis?\b/, /\bhezbollah\b/, /\btaliban\b/,
+  /strait of hormuz/,
+  // Politician names — extensive list
   /\btrump\b/, /\bbiden\b/, /\bharris\b/, /\bobama\b/, /\bclinton\b/,
   /\bputin\b/, /\bzelensky\b/, /\bxi jinping\b/, /\bmodi\b/, /\bmacron\b/,
   /\bstarmer\b/, /\bsunak\b/, /\bbadenoch\b/, /\bmerkel\b/, /\bscholz\b/,
   /\bmeloni\b/, /\berdogan\b/, /\bkhamenei\b/, /\bnetanyahu\b/, /\babbas\b/,
   /\bmilei\b/, /\blula\b/, /\bbolsonaro\b/, /\btrudeau\b/,
-  /\balbanese\b/, /\bardern\b/, /\bjohnson\b.*(?:prime|politics|elect)/,
-  /\bfarage\b/, /\ble pen\b/, /\borban\b/, /\bkim jong un\b/,
-  /\bmaduro\b/, /\bcastro\b/, /\blukashenko\b/, /\bmbs\b/, /\bbin salman\b/,
-  /\bsisi\b/, /\bkagame\b/, /\bramaphosa\b/, /\bpetro\b.*(?:leader|colombia|president|out)/,
-  /van duyne/,
-  /balance of power/,
-].map(r => r.source).join('|'), 'i');
+  /\balbanese\b/, /\bardern\b/, /\bfarage\b/, /\ble pen\b/, /\borban\b/,
+  /\bkim jong un\b/, /\bmaduro\b/, /\bcastro\b/, /\blukashenko\b/,
+  /\bmbs\b/, /\bbin salman\b/, /\bsisi\b/, /\bkagame\b/, /\bramaphosa\b/,
+  /\bhegseth\b/, /\bmachado\b/, /\bguaidó?\b/,
+  /\bpetro\b/, /\bkapitány\b/, /\brodríguez\b.*(?:leader|venezuela)/,
+  /van duyne/, /balance of power/,
+  /\bus forces\b/, /\bus strike\b/, /\bacquire\b.*\bgreenland\b/,
+]);
 
-const CRYPTO_RE = new RegExp([
+// ─── CRYPTO ────────────────────────────────────────────────────────────────────
+const CRYPTO_RE = re([
   /\bbitcoin\b/, /\bbtc\b/, /\bethereum\b/, /\bcrypto\b/, /\bblockchain\b/,
   /\bdefi\b/, /\bnft\b/, /\bstablecoin\b/, /\busdc\b/, /\busdt\b/, /\btether\b/,
   /\bcoinbase\b/, /\bbinance\b/,
   /\baltcoin\b/, /\bmemecoin\b/, /\bairdrop\b/, /\bwallet\b/, /\bweb3\b/,
-  /\bon-chain\b/, /\bl1\b/, /\bl2\b/, /\bprotocol\b/,
-  /\bfdv\b/, /launch token/, /token launch/,
+  /\bon-chain\b/, /\bprotocol\b.*(?:token|tvl|launch|defi)/,
+  /\bfdv\b/, /launch token/, /token launch/, /\btoken\b.*(?:launch|price|airdrop)/,
   /\bsolana\b/, /\bxrp\b/, /\bripple\b/, /\bcardano\b/,
-  /\bavalanche\b/, /\bavax\b/, /\bpolygon\b/, /\bmatic\b/,
+  /\bavalanche\b.*(?:token|crypto|chain|avax)/, /\bavax\b/,
+  /\bpolygon\b.*(?:token|crypto|matic)/, /\bmatic\b/,
   /\bchainlink\b/, /\buniswap\b/, /\baave\b/,
   /\bdogecoin\b/, /\bdoge\b/, /\bshiba\b/, /\bbnb\b/,
-  /\bkraken\b/, /\bbybit\b/, /\bmicrostrategy\b/, /\bbitboy\b/,
-  /\bmegaeth\b/, /\bedgex\b/, /predict\.fun/,
-  // "market cap" only in crypto context (near token-like words)
-  /market cap/,
-].map(r => r.source).join('|'), 'i');
+  /\bkraken\b.*(?:exchange|crypto|token)/, /\bbybit\b/,
+  /\bmicrostrategy\b/, /\bbitboy\b/,
+  /\bmegaeth\b/, /\bedgex\b/, /predict\.fun/, /\bpuffpaw\b/, /\bbackpack\b.*(?:fdv|token|launch)/,
+  /\busd\.ai\b/, /\bhyperliquid\b/, /\bjupiter\b.*(?:token|sol|swap)/,
+  /\bsei\b.*(?:token|chain|network)/, /\bsui\b.*(?:token|chain|network)/,
+  /\baptos\b/, /\bcelestia\b/, /\beigenlayer\b/, /\bstarknet\b/, /\bzksync\b/,
+  /\barbitrum\b/, /\boptimism\b.*(?:token|chain|op\b)/, /\bbase\b.*(?:chain|l2|token)/,
+  /\btron\b.*(?:token|crypto|trx)/, /\bnear\b.*(?:token|protocol|chain)/,
+  /\bmetamask\b/, /\bphantom\b.*(?:wallet|solana)/,
+  /market cap.*(?:token|crypto|coin|btc|eth|sol)/,
+  /(?:token|crypto|coin|btc|eth|sol).*market cap/,
+  /all.time high.*(?:eth|btc|bitcoin|ethereum|crypto|sol|xrp)/,
+  /\beth\b.*(?:price|reach|\$|all.time)/,
+]);
 
-const MACRO_RE = new RegExp([
+// ─── MACRO ─────────────────────────────────────────────────────────────────────
+const MACRO_RE = re([
   /federal reserve/, /\bthe fed\b/, /\bfed\b.*(?:rate|cut|hike|meeting|funds|policy)/,
   /interest rate/, /\binflation\b/, /\bcpi\b/, /\bgdp\b/, /\brecession\b/,
   /\bunemployment\b/, /\bpowell\b/, /\bfomc\b/,
@@ -114,9 +204,13 @@ const MACRO_RE = new RegExp([
   /\bimf\b/, /world bank/, /monetary policy/, /\bfiscal\b/,
   /\boil price\b/, /\bcrude oil\b/, /\bcrude\b.*\$/, /\bgold price\b/, /\bcommodity\b/,
   /\bmsci\b/, /\bdelisted\b/,
-].map(r => r.source).join('|'), 'i');
+  /\bsaudi aramco\b/, /largest company.*market cap/, /\bshort squeeze\b/,
+  /\bbrent\b.*(?:oil|\$|price)/, /\bwti\b.*(?:oil|\$|price)/,
+  /\brate cut/, /\brate hike/,
+]);
 
-const AITECH_RE = new RegExp([
+// ─── AI / TECH ─────────────────────────────────────────────────────────────────
+const AITECH_RE = re([
   /artificial intelligence/,
   /\bopenai\b/, /\bchatgpt\b/, /\bgpt[-‑]?\d/, /\banthropic\b/, /\bclaude\b/,
   /\bgemini\b.*(?:ai|model|google)/, /\bllm\b/, /large language model/,
@@ -127,25 +221,68 @@ const AITECH_RE = new RegExp([
   /\brobotics\b/, /\bautonomous\b/, /self[- ]driving/,
   /\bgrok\b/, /\bxai\b/, /\bmistral\b/, /\bperplexity\b/, /\bcursor\b/,
   /\bdeepseek\b/, /hugging face/, /\bagentic\b/,
-  /\blovable\b/,
-].map(r => r.source).join('|'), 'i');
+  /\blovable\b/, /\bnebius\b/,
+  /\bbaidu\b.*(?:ai|model)/, /\bmoonshot\b.*(?:ai|model)/,
+  /best ai model/, /ai model\b/,
+  /\bapple\b.*(?:launch|release|iphone|wwdc|vision pro)/,
+  /\bgoogle\b.*(?:launch|release|search|gemini|pixel)/,
+  /\bmeta\b.*(?:launch|release|llama|quest|metaverse)/,
+  /\bmicrosoft\b.*(?:launch|release|copilot|azure)/,
+  /\bamazon\b.*(?:launch|release|alexa|aws)/,
+  /\bapp store\b/, /\biphone\b/, /\bandroid\b/,
+]);
 
-// Specific \bai\b check — only match when it looks like "artificial intelligence" context,
-// not words like "said", "aimed", etc. Require standalone "AI" (uppercase) or surrounded by
-// tech-adjacent words.
+// ─── ENTERTAINMENT ─────────────────────────────────────────────────────────────
+const ENTERTAINMENT_RE = re([
+  // Awards
+  /academy awards?/, /\boscars?\b/, /\bemmy\b/, /\bgrammy\b/, /\bgolden globe/,
+  /\bbafta\b/, /\bsag award/, /\btony award/, /\bcritics.? choice/,
+  /best (?:actor|actress|director|picture|film|animated|international|documentary|screenplay|original|supporting)/,
+  /\bnobel\b.*(?:prize|peace|literature|physics|chemistry)/,
+  // Film & TV
+  /\bbox office\b/, /\bgrossing\b/, /\btop grossing\b/, /\bopening weekend\b/,
+  /\bmovie\b/, /\bfilm\b.*(?:release|win|award|gross|premiere)/,
+  /\btv show\b/, /\bseason \d+\b.*(?:release|premiere|episode)/,
+  /\bepisode\b.*(?:release|premiere)/,
+  /\bnetflix\b/, /\bdisney\b.*(?:plus|\+|movie|release)/, /\bhbo\b/, /\bhulu\b/,
+  /\bamazon prime\b/, /\bstreaming\b/,
+  /stranger things/, /toy story/, /\belio\b.*(?:animated|award|film)/,
+  /\barco\b.*(?:animated|award|film)/,
+  // Music
+  /\balbum\b.*(?:release|drop|chart|billboard)/, /\bbillboard\b/,
+  /\bspotify\b.*(?:stream|record|chart)/,
+  /\btaylor swift\b/, /\bdrake\b.*(?:album|song|release|chart)/,
+  /\bkanye\b/, /\bkendrick\b.*(?:album|song|release)/,
+  // Eurovision
+  /\beurovision\b/,
+  // YouTube / social media celebrity
+  /\bmrbeast\b/, /\byoutube\b.*(?:view|subscribe|record|video)/,
+  /\btiktok\b.*(?:ban|view|viral|download)/, /\binfluencer\b/,
+  /\bstreamer\b/, /\btwitch\b.*(?:ban|stream|viewer)/,
+  /million.*views/, /views.*(?:week|day|hour)/,
+  // Celebrity / pop culture
+  /\bkardashian\b/, /\bbeyonce\b/, /\brihanna\b/, /\blady gaga\b/,
+  /\bjustin bieber\b/, /\bdoja cat\b/, /\bbillie eilish\b/,
+  /\bparis\b.*(?:hilton|fashion)/, /\bfashion week\b/,
+  /\broyal family\b/, /\bking charles\b/, /\bprince\b.*(?:harry|william)/,
+  /\bmeghan\b.*(?:markle|duchess)/,
+]);
+
+// ─── Uppercase "AI" check (case-sensitive) ─────────────────────────────────────
 function looksLikeAI(question: string): boolean {
-  // Uppercase "AI" as a standalone word is almost always artificial intelligence
-  if (/\bAI\b/.test(question)) return true;
-  return false;
+  return /\bAI\b/.test(question);
 }
 
 function classifyCategory(question: string, tags?: { label: string }[]): MarketCategory {
   const tagLabels = (tags ?? []).map((t) => t.label.toLowerCase());
 
   // ── Sports first: catches team names, "vs.", "win on <date>" before other rules
-  // can misfire on substrings like "eth" in "Beth", "sol" in "Solana" etc.
-  if (tagLabels.some((l) => /sport|nba|nfl|soccer|football|baseball|hockey|tennis|golf|cricket|rugby/.test(l)) ||
+  if (tagLabels.some((l) => /sport|nba|nfl|soccer|football|baseball|hockey|tennis|golf|cricket|rugby|esport/.test(l)) ||
       SPORTS_RE.test(question)) return 'SPORTS';
+
+  // ── Entertainment: awards, movies, TV, music, celebrities
+  if (tagLabels.some((l) => /entertainment|movie|film|music|award|celeb|culture/.test(l)) ||
+      ENTERTAINMENT_RE.test(question)) return 'ENTERTAINMENT';
 
   // ── Politics: geopolitical events, elections, named politicians
   if (tagLabels.some((l) => /politic|election|president|parliament|government/.test(l)) ||

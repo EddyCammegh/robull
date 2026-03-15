@@ -1,4 +1,4 @@
-export type MarketCategory = 'MACRO' | 'POLITICS' | 'CRYPTO' | 'SPORTS' | 'AI/TECH' | 'OTHER';
+export type MarketCategory = 'MACRO' | 'POLITICS' | 'CRYPTO' | 'SPORTS' | 'AI/TECH' | 'ENTERTAINMENT' | 'OTHER';
 
 export interface Agent {
   id: string;

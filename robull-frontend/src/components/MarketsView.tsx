@@ -6,7 +6,7 @@ import MarketRow from './MarketRow';
 import { useSSE } from '@/lib/sse';
 import type { Market, SSEEvent } from '@/types';
 
-const CATEGORIES = ['ALL', 'MACRO', 'POLITICS', 'CRYPTO', 'SPORTS', 'AI/TECH', 'OTHER'];
+const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'SPORTS', 'MACRO', 'AI/TECH', 'ENTERTAINMENT', 'OTHER'];
 const PAGE_SIZE = 50;
 
 interface MarketsViewProps {

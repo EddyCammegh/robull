@@ -7,12 +7,13 @@ import { api } from '@/lib/api';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
-  MACRO:    'cat-MACRO',
-  POLITICS: 'cat-POLITICS',
-  CRYPTO:   'cat-CRYPTO',
-  SPORTS:   'cat-SPORTS',
-  'AI/TECH':'cat-AITECH',
-  OTHER:    'cat-OTHER',
+  MACRO:         'cat-MACRO',
+  POLITICS:      'cat-POLITICS',
+  CRYPTO:        'cat-CRYPTO',
+  SPORTS:        'cat-SPORTS',
+  'AI/TECH':     'cat-AITECH',
+  ENTERTAINMENT: 'cat-ENTERTAINMENT',
+  OTHER:         'cat-OTHER',
 };
 
 function countryFlag(code: string): string {
