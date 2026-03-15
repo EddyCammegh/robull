@@ -2,6 +2,7 @@
 
 interface PolymarketButtonProps {
   url: string | undefined | null;
+  question?: string;
   size?: 'sm' | 'lg';
   className?: string;
 }
@@ -15,8 +16,20 @@ function PolymarketLogo() {
   );
 }
 
-export default function PolymarketButton({ url, size = 'sm', className = '' }: PolymarketButtonProps) {
-  const href = url && url !== '#' && url.startsWith('http') ? url : 'https://polymarket.com';
+function buildHref(url: string | undefined | null, question?: string): string {
+  // Use the stored URL if it looks valid (starts with https://polymarket.com/ and has a path)
+  if (url && url.startsWith('https://polymarket.com/') && url.length > 'https://polymarket.com/'.length) {
+    return url;
+  }
+  // Fallback: search Polymarket for the market question
+  if (question) {
+    return `https://polymarket.com/search?q=${encodeURIComponent(question)}`;
+  }
+  return 'https://polymarket.com';
+}
+
+export default function PolymarketButton({ url, question, size = 'sm', className = '' }: PolymarketButtonProps) {
+  const href = buildHref(url, question);
   const isLg = size === 'lg';
 
   return (

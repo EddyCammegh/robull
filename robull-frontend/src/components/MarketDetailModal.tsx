@@ -157,7 +157,7 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
 
         {/* Footer with Polymarket button */}
         <div className="p-6 border-t border-border">
-          <PolymarketButton url={market.polymarket_url} size="lg" />
+          <PolymarketButton url={market.polymarket_url} question={market.question} size="lg" />
         </div>
       </div>
     </div>

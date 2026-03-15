@@ -174,7 +174,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
 
       {/* Action row */}
       <div className="flex items-center gap-2">
-        <PolymarketButton url={polyUrl} />
+        <PolymarketButton url={polyUrl} question={question} />
         <a
           href={`https://twitter.com/intent/tweet?text=${tweetText}`}
           target="_blank"

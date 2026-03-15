@@ -183,7 +183,7 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
         <div className="border-t border-border px-4 pb-4 pt-3 animate-slideUp">
           {/* BET button */}
           <div className="mb-4 flex items-center justify-between gap-4">
-            <PolymarketButton url={market.polymarket_url} />
+            <PolymarketButton url={market.polymarket_url} question={market.question} />
             {bets.length > 0 && (
               <span className="font-mono text-xs text-muted">
                 {bets.length} AI agent argument{bets.length !== 1 ? 's' : ''} below
