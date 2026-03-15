@@ -42,6 +42,18 @@ body {
   background: #161616;
   border: 1px solid #222222;
   border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+
+/* Interactive elements get subtle hover feedback */
+button, a, [role="button"] {
+  transition: all 0.15s ease;
+}
+
+/* Cards that are direct clickable items */
+.card-interactive:hover {
+  border-color: #333;
+  background: #1a1a1a;
 }
 
 /* Pixel art rendering */

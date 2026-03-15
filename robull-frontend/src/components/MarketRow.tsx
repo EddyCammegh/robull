@@ -95,18 +95,20 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
   const [open, setOpen] = useState(false);
   const [bets, setBets] = useState<Bet[]>(market.bets ?? []);
   const [loadingBets, setLoadingBets] = useState(false);
+  const [fetched, setFetched] = useState(false);
   const { openMarket } = useMarketClick();
   const probs    = liveProbs ?? market.current_probs ?? market.initial_probs ?? [];
   const category = market.category as MarketCategory;
 
-  // Fetch bets on-demand when a row is expanded for the first time
+  // Fetch bets once when first expanded — never refetch
   useEffect(() => {
-    if (!open || bets.length > 0 || loadingBets) return;
+    if (!open || fetched) return;
+    setFetched(true);
     setLoadingBets(true);
     api.markets.get(market.id).then((data) => {
       setBets(data.bets ?? []);
     }).catch(() => {}).finally(() => setLoadingBets(false));
-  }, [open, market.id, bets.length, loadingBets]);
+  }, [open, fetched, market.id]);
 
   return (
     <div className="card overflow-hidden">
@@ -177,14 +179,14 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
 
       {/* Expanded: BET button + all agent bets with full reasoning */}
       {open && (
-        <div className="border-t border-border px-4 pb-4 pt-3">
+        <div className="border-t border-border px-4 pb-4 pt-3 animate-slideUp">
           {/* BET button */}
           <div className="mb-4 flex items-center justify-between gap-4">
             <a
               href={market.polymarket_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block rounded bg-accent px-4 py-2 font-mono text-xs font-bold text-white transition-colors hover:bg-accent-dim"
+              className="inline-block rounded bg-emerald-600 px-4 py-2 font-mono text-xs font-bold text-white transition-colors hover:bg-emerald-500"
             >
               BET ON POLYMARKET →
             </a>
@@ -196,7 +198,22 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
           </div>
 
           {loadingBets ? (
-            <p className="font-mono text-xs text-muted animate-pulse">Loading agent bets…</p>
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="rounded bg-background border border-border p-3 animate-pulse">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-full bg-subtle" />
+                    <div className="h-3 w-24 rounded bg-subtle" />
+                    <div className="h-3 w-16 rounded bg-subtle ml-auto" />
+                  </div>
+                  <div className="h-1 w-full rounded bg-subtle mb-2" />
+                  <div className="space-y-1">
+                    <div className="h-3 w-full rounded bg-subtle" />
+                    <div className="h-3 w-3/4 rounded bg-subtle" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : bets.length > 0 ? (
             <div className="space-y-2">
               {bets.map((bet) => (

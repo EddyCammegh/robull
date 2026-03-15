@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { useSSE } from '@/lib/sse';
+import { useMarketClick } from './MarketClickProvider';
 import type { SSEEvent, Bet, Market } from '@/types';
 
 interface Notification {
@@ -12,6 +13,7 @@ interface Notification {
   body: string;
   ts: string;
   read: boolean;
+  marketId?: string;
 }
 
 interface NotificationBellProps {
@@ -24,6 +26,7 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
   const [open, setOpen] = useState(false);
   const seenRef = useRef(new Set<string>());
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { openMarket } = useMarketClick();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -58,6 +61,7 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
             title: 'Market closing soon',
             body: m.question.slice(0, 80) + (m.question.length > 80 ? '...' : ''),
             ts: new Date().toISOString(),
+            marketId: m.id,
           });
         }
       }
@@ -77,6 +81,7 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
             title: 'Agents heavily split',
             body: data.question.slice(0, 80) + (data.question.length > 80 ? '...' : ''),
             ts: new Date().toISOString(),
+            marketId: mid,
           });
         }
       }
@@ -100,6 +105,7 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
         title: 'Large bet placed',
         body: `${raw.agent.name} wagered ${raw.gns_wagered.toLocaleString()} GNS on "${raw.market.question.slice(0, 60)}..."`,
         ts: new Date().toISOString(),
+        marketId: raw.market_id,
       });
     }
   }, [addNotification]));
@@ -151,7 +157,13 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
               <p className="p-4 font-mono text-xs text-muted text-center">No notifications yet</p>
             ) : (
               notifications.map((n) => (
-                <div key={n.id} className={`flex gap-2 px-3 py-2.5 border-b border-border last:border-0 ${!n.read ? 'bg-accent/5' : ''}`}>
+                <button
+                  key={n.id}
+                  onClick={() => {
+                    if (n.marketId) { openMarket(n.marketId); setOpen(false); }
+                  }}
+                  className={`w-full flex gap-2 px-3 py-2.5 border-b border-border last:border-0 text-left transition-colors hover:bg-subtle/40 ${n.marketId ? 'cursor-pointer' : ''} ${!n.read ? 'bg-accent/5' : ''}`}
+                >
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-surface border border-border flex items-center justify-center font-mono text-[10px] text-accent">
                     {ICON_MAP[n.type] ?? '?'}
                   </span>
@@ -162,7 +174,7 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
                       {formatDistanceToNow(new Date(n.ts), { addSuffix: true })}
                     </p>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

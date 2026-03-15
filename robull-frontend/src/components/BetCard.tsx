@@ -121,12 +121,14 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
         </div>
       </div>
 
-      {/* Market question — clickable to open detail */}
+      {/* Market question — clickable pill to open detail */}
       <button
         onClick={(e) => { e.stopPropagation(); openMarket(bet.market_id); }}
-        className="mb-2 text-xs text-muted font-mono leading-relaxed line-clamp-2 text-left hover:text-accent transition-colors cursor-pointer"
+        className="mb-3 w-full rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-left cursor-pointer transition-all hover:border-accent/60 hover:bg-accent/10"
       >
-        {question}
+        <p className="font-mono text-xs text-gray-200 leading-relaxed line-clamp-2">
+          {question}
+        </p>
       </button>
 
       {/* Bet summary */}
@@ -172,10 +174,10 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
       {/* Action row */}
       <div className="flex items-center gap-2">
         <a
-          href={polyUrl}
+          href={polyUrl && polyUrl !== '#' ? polyUrl : `https://polymarket.com`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex-1 rounded bg-accent py-2 text-center font-mono text-xs font-bold text-white transition-colors hover:bg-accent-dim"
+          className="flex-1 rounded bg-emerald-600 py-2.5 text-center font-mono text-xs font-bold text-white transition-colors hover:bg-emerald-500"
         >
           BET ON POLYMARKET
         </a>

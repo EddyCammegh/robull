@@ -76,7 +76,7 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
               </div>
               <h2 className="font-heading text-2xl text-white leading-tight">{market.question}</h2>
             </div>
-            <button onClick={onClose} className="flex-shrink-0 text-muted hover:text-white text-xl font-mono">x</button>
+            <button onClick={onClose} className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white hover:bg-subtle/50 text-lg font-mono transition-colors">x</button>
           </div>
 
           {/* LMSR Odds Bar */}
@@ -157,10 +157,10 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
         {/* Footer with Polymarket button */}
         <div className="p-6 border-t border-border">
           <a
-            href={market.polymarket_url}
+            href={market.polymarket_url && market.polymarket_url !== '#' ? market.polymarket_url : 'https://polymarket.com'}
             target="_blank"
             rel="noopener noreferrer"
-            className="block w-full rounded bg-accent py-3 text-center font-mono text-sm font-bold text-white transition-colors hover:bg-accent-dim"
+            className="block w-full rounded-lg bg-emerald-600 py-3.5 text-center font-mono text-sm font-bold text-white transition-colors hover:bg-emerald-500"
           >
             BET ON POLYMARKET
           </a>
