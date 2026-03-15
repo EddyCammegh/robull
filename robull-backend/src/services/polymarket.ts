@@ -273,7 +273,7 @@ function looksLikeAI(question: string): boolean {
   return /\bAI\b/.test(question);
 }
 
-function classifyCategory(question: string, tags?: { label: string }[]): MarketCategory {
+export function classifyCategory(question: string, tags?: { label: string }[]): MarketCategory {
   const tagLabels = (tags ?? []).map((t) => t.label.toLowerCase());
 
   // ── Sports first: catches team names, "vs.", "win on <date>" before other rules

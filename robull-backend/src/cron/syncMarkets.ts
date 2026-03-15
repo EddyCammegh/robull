@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { fetchPolymarkets } from '../services/polymarket.js';
+import { fetchPolymarkets, classifyCategory } from '../services/polymarket.js';
 
 export async function syncMarkets(db: Pool): Promise<void> {
   console.log('[cron] Syncing markets from Polymarket...');
@@ -37,7 +37,22 @@ export async function syncMarkets(db: Pool): Promise<void> {
       synced++;
     }
 
-    console.log(`[cron] Synced ${synced} markets.`);
+    console.log(`[cron] Synced ${synced} markets from API.`);
+
+    // Reclassify ALL markets in DB using the latest classification rules.
+    // This catches markets that the API no longer returns (closed, inactive, etc.)
+    const { rows } = await db.query('SELECT id, question, category FROM markets');
+    let reclassified = 0;
+    for (const row of rows) {
+      const newCategory = classifyCategory(row.question);
+      if (newCategory !== row.category) {
+        await db.query('UPDATE markets SET category = $1, updated_at = NOW() WHERE id = $2', [newCategory, row.id]);
+        reclassified++;
+      }
+    }
+    if (reclassified > 0) {
+      console.log(`[cron] Reclassified ${reclassified} markets.`);
+    }
   } catch (err) {
     console.error('[cron] Market sync failed:', err);
   }
