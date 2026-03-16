@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback } from 'react';
 import MarketDetailModal from './MarketDetailModal';
+import { fixMarketNumerics, fixBetNumerics } from '@/lib/api';
 import type { Market, Bet } from '@/types';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -29,8 +30,8 @@ export function MarketClickProvider({ children }: { children: React.ReactNode })
       const res = await fetch(`${API}/v1/markets/${marketId}`);
       if (res.ok) {
         const data = await res.json();
-        setSelectedMarket(data);
-        setBets(data.bets ?? []);
+        setSelectedMarket(fixMarketNumerics(data));
+        setBets(Array.isArray(data.bets) ? data.bets.map(fixBetNumerics) : []);
       } else if (market) {
         setSelectedMarket(market);
       }

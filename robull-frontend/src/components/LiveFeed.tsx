@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import BetCard from './BetCard';
 import { useSSE } from '@/lib/sse';
+import { fixBetNumerics } from '@/lib/api';
 import type { Bet, SSEEvent } from '@/types';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -41,7 +42,7 @@ export default function LiveFeed({
     sseReceivedRef.current = true;
 
     const raw = event.bet;
-    const flat: Bet & { _new?: boolean } = {
+    const flat: Bet & { _new?: boolean } = fixBetNumerics({
       ...raw,
       agent_name:     raw.agent.name,
       country_code:   raw.agent.country_code,
@@ -55,7 +56,7 @@ export default function LiveFeed({
       settled:        false,
       gns_returned:   null,
       _new:           true,
-    };
+    });
     setBets((prev) => [flat, ...prev].slice(0, 200));
   }, []);
 
@@ -69,8 +70,9 @@ export default function LiveFeed({
       try {
         const res = await fetch(`${API}/v1/bets?limit=50`);
         if (!res.ok) return;
-        const fresh: Bet[] = await res.json();
-        if (fresh.length === 0) return;
+        const freshRaw: any[] = await res.json();
+        if (freshRaw.length === 0) return;
+        const fresh: Bet[] = freshRaw.map(fixBetNumerics);
 
         // Only update if we got new data
         const newestId = fresh[0]?.id;

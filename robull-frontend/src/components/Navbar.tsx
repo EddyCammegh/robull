@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import BullLogo from './BullLogo';
 import NotificationBell from './NotificationBell';
+import { fixMarketNumerics, fixBetNumerics } from '@/lib/api';
 import clsx from 'clsx';
 import type { Market, Bet } from '@/types';
 
@@ -26,11 +27,11 @@ export default function Navbar() {
   useEffect(() => {
     fetch(`${API}/v1/markets?resolved=false`, { next: { revalidate: 60 } } as any)
       .then(r => r.ok ? r.json() : [])
-      .then(setMarkets)
+      .then((data: any[]) => setMarkets(data.map(fixMarketNumerics)))
       .catch(() => {});
     fetch(`${API}/v1/bets?limit=100`, { next: { revalidate: 30 } } as any)
       .then(r => r.ok ? r.json() : [])
-      .then(setBets)
+      .then((data: any[]) => setBets(data.map(fixBetNumerics)))
       .catch(() => {});
   }, []);
 
