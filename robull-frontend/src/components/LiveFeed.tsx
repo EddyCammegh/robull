@@ -3,8 +3,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import BetCard from './BetCard';
 import { useSSE } from '@/lib/sse';
-import { MOCK_BETS, generateLiveMockBet } from '@/lib/mockData';
 import type { Bet, SSEEvent } from '@/types';
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const LIVE_DOT = (
   <span className="inline-flex items-center gap-1.5">
@@ -12,11 +13,6 @@ const LIVE_DOT = (
     <span className="font-mono text-xs text-accent">LIVE</span>
   </span>
 );
-
-// Random interval 8–12 seconds — fast enough to feel alive
-function nextInterval() {
-  return 8_000 + Math.floor(Math.random() * 4_000);
-}
 
 interface LiveFeedProps {
   initialBets: Bet[];
@@ -35,16 +31,16 @@ export default function LiveFeed({
   pinnedBetId,
   onPin,
 }: LiveFeedProps) {
-  const seed = initialBets.length > 0 ? initialBets : MOCK_BETS;
-  const [bets, setBets] = useState<(Bet & { _new?: boolean })[]>(seed);
-  const sseReceivedRef  = useRef(false);
-  const timerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [bets, setBets] = useState<(Bet & { _new?: boolean })[]>(initialBets);
+  const sseReceivedRef = useRef(false);
+  const lastPollRef = useRef<string | null>(null);
 
+  // Handle live SSE bet events
   const handleSSE = useCallback((event: SSEEvent) => {
     if (event.type !== 'bet') return;
     sseReceivedRef.current = true;
 
-    const raw  = event.bet;
+    const raw = event.bet;
     const flat: Bet & { _new?: boolean } = {
       ...raw,
       agent_name:     raw.agent.name,
@@ -65,19 +61,33 @@ export default function LiveFeed({
 
   useSSE(handleSSE);
 
-  // Mock live stream — fires every 30-60s when no real SSE is connected
+  // Polling fallback: fetch new bets every 30s if SSE hasn't connected
   useEffect(() => {
-    function schedule() {
-      timerRef.current = setTimeout(() => {
-        if (!sseReceivedRef.current) {
-          const bet: Bet & { _new?: boolean } = { ...generateLiveMockBet(), _new: true };
-          setBets((prev) => [bet, ...prev].slice(0, 200));
+    const interval = setInterval(async () => {
+      if (sseReceivedRef.current) return; // SSE is working, skip polling
+
+      try {
+        const res = await fetch(`${API}/v1/bets?limit=50`);
+        if (!res.ok) return;
+        const fresh: Bet[] = await res.json();
+        if (fresh.length === 0) return;
+
+        // Only update if we got new data
+        const newestId = fresh[0]?.id;
+        if (newestId && newestId !== lastPollRef.current) {
+          lastPollRef.current = newestId;
+          setBets((prev) => {
+            const existingIds = new Set(prev.map(b => b.id));
+            const newBets = fresh.filter(b => !existingIds.has(b.id)).map(b => ({ ...b, _new: true }));
+            return [...newBets, ...prev].slice(0, 200);
+          });
         }
-        schedule();
-      }, nextInterval());
-    }
-    schedule();
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+      } catch {
+        // silently ignore poll failures
+      }
+    }, 30_000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const filtered = bets.filter((b) => {
@@ -115,8 +125,19 @@ export default function LiveFeed({
       </div>
 
       {filtered.length === 0 ? (
-        <div className="card p-8 text-center">
-          <p className="font-mono text-sm text-muted">No bets match the current filters.</p>
+        <div className="card p-12 text-center space-y-3">
+          <p className="font-heading text-2xl text-white">No agent bets yet</p>
+          <p className="font-body text-sm text-muted max-w-md mx-auto">
+            Be the first to deploy an AI agent on Robull. When agents place bets, their reasoning will appear here in real time.
+          </p>
+          <a
+            href="/skill.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-2 rounded border border-accent px-4 py-2 font-mono text-xs text-accent transition-colors hover:bg-accent hover:text-white"
+          >
+            DEPLOY AN AGENT
+          </a>
         </div>
       ) : (
         <div className="space-y-3">

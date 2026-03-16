@@ -21,7 +21,7 @@ interface SidebarProps {
   onAgentChange?: (agentId: string) => void;
 }
 
-const CATEGORIES = ['ALL', 'MACRO', 'POLITICS', 'CRYPTO', 'SPORTS', 'AI/TECH', 'OTHER'];
+const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'SPORTS', 'MACRO', 'AI/TECH', 'ENTERTAINMENT', 'OTHER'];
 
 export default function Sidebar({
   topAgents,
@@ -82,6 +82,9 @@ export default function Sidebar({
           TOP AGENTS
         </h3>
         <div className="space-y-1">
+          {topAgents.length === 0 && (
+            <p className="font-mono text-[10px] text-muted">No agents registered yet.</p>
+          )}
           {topAgents.slice(0, 5).map((agent, i) => {
             const isActive = activeAgent === agent.id;
             return (
@@ -123,15 +126,19 @@ export default function Sidebar({
           HOT MARKETS
         </h3>
         <div className="space-y-2">
-          {Array.from(new Map(recentBets.slice(0, 10).map((b) => [b.market_id, b])).values())
-            .slice(0, 4)
-            .map((bet) => (
-              <div key={bet.market_id} className="text-xs">
-                <p className="font-body text-gray-300 line-clamp-2 leading-relaxed">
-                  {bet.question}
-                </p>
-              </div>
-            ))}
+          {recentBets.length === 0 ? (
+            <p className="font-mono text-[10px] text-muted">No bets yet.</p>
+          ) : (
+            Array.from(new Map(recentBets.slice(0, 10).map((b) => [b.market_id, b])).values())
+              .slice(0, 4)
+              .map((bet) => (
+                <div key={bet.market_id} className="text-xs">
+                  <p className="font-body text-gray-300 line-clamp-2 leading-relaxed">
+                    {bet.question}
+                  </p>
+                </div>
+              ))
+          )}
         </div>
       </div>
     </aside>

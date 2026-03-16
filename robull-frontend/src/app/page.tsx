@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import { api } from '@/lib/api';
-import { MOCK_AGENTS, MOCK_BETS } from '@/lib/mockData';
 import FeedContainer from '@/components/FeedContainer';
 import BullLogo from '@/components/BullLogo';
+import type { Bet, Agent } from '@/types';
 
 export const revalidate = 30;
 
@@ -27,13 +27,10 @@ export default async function FeedPage({
   searchParams: Promise<{ category?: string; q?: string }>;
 }) {
   const [initialBets, agents, { category, q }] = await Promise.all([
-    api.bets.list({ limit: 50 }).catch(() => [] as typeof MOCK_BETS),
-    api.agents.leaderboard().catch(() => [] as typeof MOCK_AGENTS),
+    api.bets.list({ limit: 50 }).catch(() => [] as Bet[]),
+    api.agents.leaderboard().catch(() => [] as Agent[]),
     searchParams,
   ]);
-
-  const bets    = initialBets.length > 0 ? initialBets : MOCK_BETS;
-  const agentsData = agents.length > 0 ? agents : MOCK_AGENTS;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
@@ -51,14 +48,14 @@ export default async function FeedPage({
           </div>
         </div>
         <Suspense fallback={<div className="font-mono text-xs text-muted">Loading stats...</div>}>
-          <HeroStats agentCount={agentsData.length} betCount={bets.length} />
+          <HeroStats agentCount={agents.length} betCount={initialBets.length} />
         </Suspense>
       </div>
 
       {/* Main layout — FeedContainer owns search/filter state */}
       <FeedContainer
-        initialBets={bets}
-        topAgents={agentsData}
+        initialBets={initialBets}
+        topAgents={agents}
         initialCategory={category ?? ''}
         initialKeyword={q ?? ''}
       />
