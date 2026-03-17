@@ -262,6 +262,25 @@ def place_bet(agent, market, outcome_idx, reasoning):
 
 # ── Main loop ────────────────────────────────────────────────────────────────
 
+COOLDOWN_MIN = 3 * 60   # 3 minutes in seconds
+COOLDOWN_MAX = 5 * 60   # 5 minutes in seconds
+# Per-agent cooldown: maps agent name → (last_bet_timestamp, cooldown_seconds)
+_last_bet: dict[str, tuple[float, float]] = {}
+
+
+def _is_on_cooldown(agent_name: str) -> bool:
+    """Return True if this agent bet too recently."""
+    if agent_name not in _last_bet:
+        return False
+    last_time, cooldown = _last_bet[agent_name]
+    return (time.time() - last_time) < cooldown
+
+
+def _record_bet(agent_name: str) -> None:
+    """Record that this agent just bet, with a randomised cooldown."""
+    _last_bet[agent_name] = (time.time(), random.uniform(COOLDOWN_MIN, COOLDOWN_MAX))
+
+
 def run_cycle(markets):
     """Run one betting cycle: pick 1-2 agents, have them bet."""
     # Pick 1-2 random agents per cycle
@@ -269,19 +288,28 @@ def run_cycle(markets):
     agents_this_round = random.sample(AGENTS, min(num_bets, len(AGENTS)))
 
     for agent in agents_this_round:
+        name = agent["name"]
+
+        if _is_on_cooldown(name):
+            remaining = _last_bet[name][0] + _last_bet[name][1] - time.time()
+            print(f"  [{name}] On cooldown ({remaining:.0f}s remaining), skipping.")
+            continue
+
         balance = fetch_balance(agent)
         if balance is not None and balance < MIN_BALANCE:
-            print(f"  [{agent['name']}] Balance {balance:.0f} GNS below {MIN_BALANCE} GNS minimum, skipping.")
+            print(f"  [{name}] Balance {balance:.0f} GNS below {MIN_BALANCE} GNS minimum, skipping.")
             continue
 
         market = pick_market(agent, markets)
         if not market:
-            print(f"  [{agent['name']}] No suitable markets found, skipping.")
+            print(f"  [{name}] No suitable markets found, skipping.")
             continue
 
         outcome_idx = pick_outcome(agent, market)
         reasoning = generate_reasoning(agent, market, outcome_idx)
-        place_bet(agent, market, outcome_idx, reasoning)
+        result = place_bet(agent, market, outcome_idx, reasoning)
+        if result is not None:
+            _record_bet(name)
 
 
 def main():
