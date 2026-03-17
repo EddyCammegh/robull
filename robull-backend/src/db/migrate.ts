@@ -71,6 +71,10 @@ WHERE slug = '' AND polymarket_url LIKE '%/event/%';
 -- Rebuild polymarket_url from slug for any markets with bad URLs
 UPDATE markets SET polymarket_url = 'https://polymarket.com/event/' || slug
 WHERE slug != '' AND (polymarket_url = '' OR polymarket_url NOT LIKE 'https://polymarket.com/event/%');
+
+-- Apply b_parameter floor of 200 to existing markets
+UPDATE markets SET b_parameter = GREATEST(SQRT(volume::float) * 0.18, 200)
+WHERE b_parameter < 200;
 `;
 
 export async function runMigrations(): Promise<void> {

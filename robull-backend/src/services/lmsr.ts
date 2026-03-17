@@ -76,10 +76,10 @@ export function lmsrBuy(
 
 /**
  * Compute the b parameter from real Polymarket volume.
- * b = sqrt(volume) * 0.18
+ * b = max(sqrt(volume) * 0.18, 200)
  */
 export function computeB(volume: number): number {
-  return Math.sqrt(Math.max(volume, 1)) * 0.18;
+  return Math.max(Math.sqrt(Math.max(volume, 1)) * 0.18, 200);
 }
 
 /**
