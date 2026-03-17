@@ -132,7 +132,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
           <p className="font-mono text-xs text-gray-200 leading-relaxed line-clamp-2 flex-1">
             {question}
           </p>
-          <CountdownTimer closesAt={bet.closes_at} className="flex-shrink-0 mt-0.5" />
+          <CountdownTimer closesAt={bet.closes_at} size="md" className="flex-shrink-0 mt-0.5" />
         </div>
       </button>
 

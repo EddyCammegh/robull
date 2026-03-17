@@ -9,6 +9,48 @@ import type { Market, SSEEvent } from '@/types';
 const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'SPORTS', 'MACRO', 'AI/TECH', 'ENTERTAINMENT', 'OTHER'];
 const PAGE_SIZE = 50;
 
+type SortKey = 'ending_soon' | 'ending_late' | 'most_active' | 'highest_vol' | 'most_contested';
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'ending_soon',    label: 'Ending soonest'  },
+  { key: 'ending_late',    label: 'Ending latest'   },
+  { key: 'most_active',    label: 'Most active'     },
+  { key: 'highest_vol',    label: 'Highest volume'  },
+  { key: 'most_contested', label: 'Most contested'  },
+];
+
+function sortMarkets(markets: Market[], key: SortKey): Market[] {
+  const sorted = [...markets];
+  switch (key) {
+    case 'ending_soon':
+      return sorted.sort((a, b) => {
+        if (!a.closes_at && !b.closes_at) return 0;
+        if (!a.closes_at) return 1;
+        if (!b.closes_at) return -1;
+        return new Date(a.closes_at).getTime() - new Date(b.closes_at).getTime();
+      });
+    case 'ending_late':
+      return sorted.sort((a, b) => {
+        if (!a.closes_at && !b.closes_at) return 0;
+        if (!a.closes_at) return -1;
+        if (!b.closes_at) return 1;
+        return new Date(b.closes_at).getTime() - new Date(a.closes_at).getTime();
+      });
+    case 'most_active':
+      return sorted.sort((a, b) => (b.bet_count ?? 0) - (a.bet_count ?? 0));
+    case 'highest_vol':
+      return sorted.sort((a, b) => b.volume - a.volume);
+    case 'most_contested':
+      // Markets with split=true first, then by bet_count
+      return sorted.sort((a, b) => {
+        if (a.split !== b.split) return a.split ? -1 : 1;
+        return (b.bet_count ?? 0) - (a.bet_count ?? 0);
+      });
+    default:
+      return sorted;
+  }
+}
+
 interface MarketsViewProps {
   markets: Market[];
 }
@@ -16,6 +58,7 @@ interface MarketsViewProps {
 export default function MarketsView({ markets }: MarketsViewProps) {
   const [category,   setCategory]   = useState('');
   const [search,     setSearch]     = useState('');
+  const [sortKey,    setSortKey]    = useState<SortKey>('ending_soon');
   const [visible,    setVisible]    = useState(PAGE_SIZE);
   const [liveProbs,  setLiveProbs]  = useState<Record<string, number[]>>({});
 
@@ -27,7 +70,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
   });
 
   const filtered = useMemo(() => {
-    return markets.filter((m) => {
+    const base = markets.filter((m) => {
       if (category && m.category !== category) return false;
       if (search) {
         const kw = search.toLowerCase();
@@ -35,7 +78,8 @@ export default function MarketsView({ markets }: MarketsViewProps) {
       }
       return true;
     });
-  }, [markets, category, search]);
+    return sortMarkets(base, sortKey);
+  }, [markets, category, search, sortKey]);
 
   // Reset visible count when filters change
   const shown = filtered.slice(0, visible);
@@ -70,14 +114,24 @@ export default function MarketsView({ markets }: MarketsViewProps) {
         })}
       </div>
 
-      {/* Search */}
-      <div className="mb-6">
+      {/* Sort + Search row */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <select
+          value={sortKey}
+          onChange={(e) => { setSortKey(e.target.value as SortKey); setVisible(PAGE_SIZE); }}
+          className="rounded bg-surface border border-border px-3 py-2 font-mono text-xs text-white focus:border-accent focus:outline-none transition-colors cursor-pointer appearance-none"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: '28px' }}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.key} value={opt.key}>{opt.label}</option>
+          ))}
+        </select>
         <input
           type="text"
           placeholder="Search markets…"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setVisible(PAGE_SIZE); }}
-          className="w-full rounded bg-surface border border-border px-3 py-2 font-mono text-xs text-white placeholder-muted focus:border-accent focus:outline-none transition-colors"
+          className="flex-1 min-w-[200px] rounded bg-surface border border-border px-3 py-2 font-mono text-xs text-white placeholder-muted focus:border-accent focus:outline-none transition-colors"
         />
       </div>
 
@@ -107,7 +161,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
       )}
 
       <p className="mt-6 font-mono text-[10px] text-muted text-center">
-        {markets.length} markets synced from Polymarket · sorted by volume
+        {markets.length} markets synced from Polymarket
       </p>
     </div>
   );
