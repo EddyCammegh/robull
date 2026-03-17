@@ -2,7 +2,7 @@ import { MarketCategory, PolymarketMarket } from '../types/index.js';
 import { computeB, bootstrapQuantities } from './lmsr.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
-const MIN_VOLUME = Number(process.env.MARKET_MIN_VOLUME ?? 1000);
+const MIN_VOLUME = Number(process.env.MARKET_MIN_VOLUME ?? 500_000);
 
 interface GammaEvent {
   id: string;
@@ -275,6 +275,51 @@ const ENTERTAINMENT_RE = re([
   /\bmeghan\b.*(?:markle|duchess)/,
 ]);
 
+// ─── LOW-QUALITY MARKET FILTERS ─────────────────────────────────────────────────
+
+const WEATHER_RE = re([
+  /\btemperature\b/, /\brainfall\b/, /\bprecipitation\b/, /\bhumidity\b/,
+  /\bforecast\b/, /\bdegrees\b/, /\bcelsius\b/, /\bfahrenheit\b/, /\bweather\b/,
+]);
+
+const OBSCURE_LOCAL_ELECTION_RE = re([
+  /\bcity council\b/, /\bmayor of\b/, /\bdistrict\b/, /\bcounty\b/,
+  /\blocal election\b/, /\bmunicipal\b/, /\bward\b/, /\bconstituency\b/,
+]);
+
+const MAJOR_COUNTRY_RE = re([
+  /\bunited states\b/, /\busa\b/, /\bu\.s\.\b/, /\bamerica\b/,
+  /\bunited kingdom\b/, /\buk\b/, /\bbritain\b/, /\bengland\b/,
+  /\bcanada\b/, /\baustralia\b/, /\bgermany\b/, /\bfrance\b/, /\bjapan\b/,
+  /\bindia\b/, /\bchina\b/, /\bbrazil\b/, /\bmexico\b/, /\brussia\b/,
+  /\bitaly\b/, /\bspain\b/, /\bsouth korea\b/, /\bindonesia\b/,
+  /\bturkey\b/, /\bsaudi arabia\b/, /\bnigeria\b/, /\bsouth africa\b/,
+]);
+
+const NICHE_FDV_RE = re([
+  /\bfdv\b/, /fully diluted/, /\btoken launch\b/,
+  /one day after launch/, /day after launch/,
+]);
+
+/**
+ * Returns true if the market should be EXCLUDED based on low-quality keyword filters.
+ */
+export function isLowQualityMarket(question: string, probs: number[]): boolean {
+  // Weather markets
+  if (WEATHER_RE.test(question)) return true;
+
+  // Obscure local elections (unless a major country is mentioned)
+  if (OBSCURE_LOCAL_ELECTION_RE.test(question) && !MAJOR_COUNTRY_RE.test(question)) return true;
+
+  // Niche FDV token launches
+  if (NICHE_FDV_RE.test(question)) return true;
+
+  // Near 50/50 ambiguous markets — ALL outcomes between 45% and 55%
+  if (probs.length >= 2 && probs.every(p => p >= 0.45 && p <= 0.55)) return true;
+
+  return false;
+}
+
 // ─── Uppercase "AI" check (case-sensitive) ─────────────────────────────────────
 function looksLikeAI(question: string): boolean {
   return /\bAI\b/.test(question);
@@ -317,7 +362,7 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
   const allMarkets: GammaMarket[] = [];
 
   for (let offset = 0; offset < TARGET_MARKETS; offset += PAGE_SIZE) {
-    const url = `${GAMMA_API}/markets?active=true&closed=false&limit=${PAGE_SIZE}&offset=${offset}&order=volume&ascending=false`;
+    const url = `${GAMMA_API}/markets?active=true&closed=false&limit=${PAGE_SIZE}&offset=${offset}&order=endDate&ascending=true`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
     const page = await res.json() as GammaMarket[];
@@ -347,6 +392,9 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
     }
 
     if (outcomes.length < 2) continue;
+
+    // Filter out low-quality markets
+    if (isLowQualityMarket(m.question, initialProbs)) continue;
 
     const b = computeB(volume);
     const quantities = bootstrapQuantities(initialProbs, b);

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
-import { fetchPolymarkets, classifyCategory } from '../services/polymarket.js';
+import { fetchPolymarkets, classifyCategory, isLowQualityMarket } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
 
 export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
@@ -59,6 +59,24 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     }
     if (reclassified > 0) {
       console.log(`[cron] Reclassified ${reclassified} markets.`);
+    }
+
+    // ── Cleanup: resolve existing markets that fail the new filters ──────────
+    const MIN_VOLUME = 500_000;
+    const { rows: allMarkets } = await db.query(
+      `SELECT id, question, volume, initial_probs FROM markets WHERE resolved = false`
+    );
+    let cleaned = 0;
+    for (const row of allMarkets) {
+      const vol = typeof row.volume === 'string' ? parseFloat(row.volume) : row.volume;
+      const probs: number[] = Array.isArray(row.initial_probs) ? row.initial_probs : [];
+      if (vol < MIN_VOLUME || isLowQualityMarket(row.question, probs)) {
+        await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      console.log(`[cron] Cleanup: resolved ${cleaned} markets that fail new quality filters.`);
     }
 
     // Enforce close buffer — resolve markets within 10 min of closes_at
