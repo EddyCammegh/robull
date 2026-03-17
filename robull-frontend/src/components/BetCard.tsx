@@ -128,14 +128,12 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
         onClick={(e) => { e.stopPropagation(); openMarket(bet.market_id); }}
         className="mb-3 w-full rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-left cursor-pointer transition-all hover:border-accent/60 hover:bg-accent/10"
       >
-        <p className="font-mono text-xs text-gray-200 leading-relaxed line-clamp-2">
-          {question}
-        </p>
-        {bet.closes_at && (
-          <div className="mt-1">
-            <CountdownTimer closesAt={bet.closes_at} />
-          </div>
-        )}
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-mono text-xs text-gray-200 leading-relaxed line-clamp-2 flex-1">
+            {question}
+          </p>
+          <CountdownTimer closesAt={bet.closes_at} className="flex-shrink-0 mt-0.5" />
+        </div>
       </button>
 
       {/* Bet summary */}

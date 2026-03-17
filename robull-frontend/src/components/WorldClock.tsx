@@ -2,15 +2,30 @@
 
 import { useState, useEffect } from 'react';
 
-const CITIES: { label: string; tz: string }[] = [
-  { label: 'LDN',  tz: 'Europe/London'       },
-  { label: 'NYC',  tz: 'America/New_York'     },
-  { label: 'TYO',  tz: 'Asia/Tokyo'           },
-  { label: 'SYD',  tz: 'Australia/Sydney'     },
-  { label: 'DXB',  tz: 'Asia/Dubai'           },
-  { label: 'SGP',  tz: 'Asia/Singapore'       },
-  { label: 'SAO',  tz: 'America/Sao_Paulo'    },
-  { label: 'FRA',  tz: 'Europe/Berlin'        },
+const CITIES: { flag: string; label: string; tz: string }[] = [
+  { flag: '🇬🇧', label: 'London',       tz: 'Europe/London'        },
+  { flag: '🇺🇸', label: 'New York',      tz: 'America/New_York'     },
+  { flag: '🇯🇵', label: 'Tokyo',         tz: 'Asia/Tokyo'           },
+  { flag: '🇦🇺', label: 'Sydney',        tz: 'Australia/Sydney'     },
+  { flag: '🇦🇪', label: 'Dubai',         tz: 'Asia/Dubai'           },
+  { flag: '🇸🇬', label: 'Singapore',     tz: 'Asia/Singapore'       },
+  { flag: '🇧🇷', label: 'São Paulo',     tz: 'America/Sao_Paulo'    },
+  { flag: '🇩🇪', label: 'Frankfurt',     tz: 'Europe/Berlin'        },
+  { flag: '🇭🇰', label: 'Hong Kong',     tz: 'Asia/Hong_Kong'       },
+  { flag: '🇮🇳', label: 'Mumbai',        tz: 'Asia/Kolkata'         },
+  { flag: '🇪🇬', label: 'Cairo',         tz: 'Africa/Cairo'         },
+  { flag: '🇿🇦', label: 'Johannesburg',  tz: 'Africa/Johannesburg'  },
+  { flag: '🇷🇺', label: 'Moscow',        tz: 'Europe/Moscow'        },
+  { flag: '🇫🇷', label: 'Paris',         tz: 'Europe/Paris'         },
+  { flag: '🇨🇦', label: 'Toronto',       tz: 'America/Toronto'      },
+  { flag: '🇺🇸', label: 'Chicago',       tz: 'America/Chicago'      },
+  { flag: '🇺🇸', label: 'Los Angeles',   tz: 'America/Los_Angeles'  },
+  { flag: '🇰🇷', label: 'Seoul',         tz: 'Asia/Seoul'           },
+  { flag: '🇮🇩', label: 'Jakarta',       tz: 'Asia/Jakarta'         },
+  { flag: '🇸🇦', label: 'Riyadh',        tz: 'Asia/Riyadh'          },
+  { flag: '🇹🇷', label: 'Istanbul',      tz: 'Europe/Istanbul'      },
+  { flag: '🇲🇽', label: 'Mexico City',   tz: 'America/Mexico_City'  },
+  { flag: '🇦🇷', label: 'Buenos Aires',  tz: 'America/Argentina/Buenos_Aires' },
 ];
 
 function formatTime(tz: string): string {
@@ -32,18 +47,22 @@ export default function WorldClock() {
     return () => clearInterval(id);
   }, []);
 
-  // Render nothing on first server render to avoid hydration mismatch
   if (times.length === 0) return <div className="h-6 bg-[#0a0a0a]" />;
+
+  // Render the city list twice for seamless infinite scroll
+  const items = CITIES.map((city, i) => (
+    <span key={city.label} className="inline-flex items-center gap-1.5 px-3 flex-shrink-0">
+      <span className="text-[10px]">{city.flag}</span>
+      <span className="font-mono text-[9px] text-muted tracking-wider whitespace-nowrap">{city.label}</span>
+      <span className="font-mono text-[10px] text-gray-400 tabular-nums">{times[i]}</span>
+    </span>
+  ));
 
   return (
     <div className="bg-[#0a0a0a] border-b border-border/50 overflow-hidden">
-      <div className="mx-auto flex max-w-7xl items-center justify-center gap-4 px-4 py-1 sm:gap-6">
-        {CITIES.map((city, i) => (
-          <div key={city.label} className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="font-mono text-[9px] text-muted tracking-wider">{city.label}</span>
-            <span className="font-mono text-[10px] text-gray-400 tabular-nums">{times[i]}</span>
-          </div>
-        ))}
+      <div className="ticker-track flex items-center py-1">
+        <div className="ticker-content flex items-center">{items}</div>
+        <div className="ticker-content flex items-center" aria-hidden>{items}</div>
       </div>
     </div>
   );
