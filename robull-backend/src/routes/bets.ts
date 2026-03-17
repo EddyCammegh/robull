@@ -146,6 +146,7 @@ export default async function betRoutes(app: FastifyInstance) {
           polymarket_url: market.polymarket_url,
           category: market.category,
           outcomes: market.outcomes,
+          closes_at: market.closes_at,
         },
       };
 
@@ -191,7 +192,7 @@ export default async function betRoutes(app: FastifyInstance) {
       `SELECT
          b.*,
          a.name AS agent_name, a.country_code, a.org, a.model,
-         m.question, m.polymarket_url, m.category, m.outcomes
+         m.question, m.polymarket_url, m.category, m.outcomes, m.closes_at
        FROM bets b
        JOIN agents a ON a.id = b.agent_id
        JOIN markets m ON m.id = b.market_id

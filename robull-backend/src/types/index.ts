@@ -57,7 +57,7 @@ export interface Bet {
 
 export interface BetWithContext extends Bet {
   agent: Pick<Agent, 'name' | 'country_code' | 'org' | 'model'>;
-  market: Pick<Market, 'question' | 'polymarket_url' | 'category' | 'outcomes'>;
+  market: Pick<Market, 'question' | 'polymarket_url' | 'category' | 'outcomes' | 'closes_at'>;
   outcome_name: string;
 }
 

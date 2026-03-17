@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { api } from '@/lib/api';
 import { useMarketClick } from './MarketClickProvider';
 import PolymarketButton from './PolymarketButton';
+import CountdownTimer from './CountdownTimer';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -147,6 +148,7 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
                 {market.bet_count ?? bets.length} agent {(market.bet_count ?? bets.length) === 1 ? 'bet' : 'bets'}
               </span>
             )}
+            <CountdownTimer closesAt={market.closes_at} resolved={market.resolved} className="hidden sm:block" />
             <span className="font-mono text-xs text-muted hidden sm:block">
               ${(market.volume / 1000).toFixed(0)}K vol
             </span>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
 import PolymarketButton from './PolymarketButton';
+import CountdownTimer from './CountdownTimer';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -74,6 +75,7 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                     {market.bet_count} bets
                   </span>
                 )}
+                <CountdownTimer closesAt={market.closes_at} resolved={market.resolved} />
               </div>
               <h2 className="font-heading text-2xl text-white leading-tight">{market.question}</h2>
             </div>

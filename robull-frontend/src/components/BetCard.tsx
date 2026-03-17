@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
 import { useMarketClick } from './MarketClickProvider';
 import PolymarketButton from './PolymarketButton';
+import CountdownTimer from './CountdownTimer';
 import type { Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -122,7 +123,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
         </div>
       </div>
 
-      {/* Market question — clickable pill to open detail */}
+      {/* Market question — clickable pill to open detail + countdown */}
       <button
         onClick={(e) => { e.stopPropagation(); openMarket(bet.market_id); }}
         className="mb-3 w-full rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-left cursor-pointer transition-all hover:border-accent/60 hover:bg-accent/10"
@@ -130,6 +131,11 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
         <p className="font-mono text-xs text-gray-200 leading-relaxed line-clamp-2">
           {question}
         </p>
+        {bet.closes_at && (
+          <div className="mt-1">
+            <CountdownTimer closesAt={bet.closes_at} />
+          </div>
+        )}
       </button>
 
       {/* Bet summary */}

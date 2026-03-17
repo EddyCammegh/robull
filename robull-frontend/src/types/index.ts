@@ -62,13 +62,14 @@ export interface Bet {
   polymarket_url?: string;
   category?: MarketCategory;
   outcomes?: string[];
+  closes_at?: string | null;
 }
 
 export interface SSEBetEvent {
   type: 'bet';
   bet: Bet & {
     agent: { name: string; country_code: string; org: string; model: string };
-    market: { question: string; polymarket_url: string; category: MarketCategory; outcomes: string[] };
+    market: { question: string; polymarket_url: string; category: MarketCategory; outcomes: string[]; closes_at?: string | null };
   };
 }
 

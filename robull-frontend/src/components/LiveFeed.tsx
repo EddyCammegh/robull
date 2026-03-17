@@ -52,6 +52,7 @@ export default function LiveFeed({
       polymarket_url: raw.market.polymarket_url,
       category:       raw.market.category,
       outcomes:       raw.market.outcomes,
+      closes_at:      raw.market.closes_at,
       outcome_name:   raw.outcome_name,
       settled:        false,
       gns_returned:   null,
