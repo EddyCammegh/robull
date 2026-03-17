@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 -u
 """
 Robull Seed Agents — continuous betting loop.
 
@@ -37,8 +37,8 @@ AGENTS = [
         "name": "CASSANDRA",
         "key": os.environ["CASSANDRA_KEY"],
         "categories": ["MACRO", "POLITICS"],
-        "min_wager": 400,
-        "max_wager": 1200,
+        "min_wager": 200,
+        "max_wager": 500,
         "system": textwrap.dedent("""\
             You are CASSANDRA, a contrarian macro-political analyst.
             You ALWAYS take the less popular side of a market. If consensus says YES,
@@ -51,8 +51,8 @@ AGENTS = [
         "name": "BAYES",
         "key": os.environ["BAYES_KEY"],
         "categories": ["CRYPTO", "MACRO"],
-        "min_wager": 300,
-        "max_wager": 800,
+        "min_wager": 150,
+        "max_wager": 400,
         "system": textwrap.dedent("""\
             You are BAYES, a probabilistic thinker from London.
             You frame everything in terms of base rates, prior probabilities,
@@ -64,8 +64,8 @@ AGENTS = [
         "name": "PYTHIA",
         "key": os.environ["PYTHIA_KEY"],
         "categories": ["POLITICS", "MACRO"],
-        "min_wager": 300,
-        "max_wager": 1000,
+        "min_wager": 150,
+        "max_wager": 350,
         "system": textwrap.dedent("""\
             You are PYTHIA, a Berlin-based political analyst.
             You are driven by current events and news flow. You reference
@@ -77,8 +77,8 @@ AGENTS = [
         "name": "MOMENTUM",
         "key": os.environ["MOMENTUM_KEY"],
         "categories": ["CRYPTO", "SPORTS"],
-        "min_wager": 200,
-        "max_wager": 600,
+        "min_wager": 100,
+        "max_wager": 300,
         "system": textwrap.dedent("""\
             You are MOMENTUM, a trend-following trader from Singapore.
             You follow price action, volume trends, and market momentum.
@@ -89,8 +89,8 @@ AGENTS = [
         "name": "GAMBLER",
         "key": os.environ["GAMBLER_KEY"],
         "categories": ["SPORTS", "ENTERTAINMENT", "CRYPTO", "POLITICS"],
-        "min_wager": 100,
-        "max_wager": 500,
+        "min_wager": 50,
+        "max_wager": 150,
         "prefer_longshots": True,
         "system": textwrap.dedent("""\
             You are GAMBLER, a degenerate Brazilian bettor who loves longshots.
@@ -103,8 +103,8 @@ AGENTS = [
         "name": "NEXUS-GPT",
         "key": os.environ["NEXUS_GPT_KEY"],
         "categories": ["AI/TECH", "MACRO"],
-        "min_wager": 500,
-        "max_wager": 1500,
+        "min_wager": 300,
+        "max_wager": 800,
         "min_confidence": 70,
         "system": textwrap.dedent("""\
             You are NEXUS-GPT, an ultra-selective AI/tech analyst from Tokyo.
@@ -117,11 +117,26 @@ AGENTS = [
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+MIN_BALANCE = 500  # Skip betting if agent balance is below this
+
 def fetch_markets():
     """Fetch all unresolved markets from the Robull API."""
     resp = requests.get(f"{API}/v1/markets", params={"resolved": "false"}, timeout=15)
     resp.raise_for_status()
     return resp.json()
+
+
+def fetch_balance(agent):
+    """Fetch the agent's current GNS balance from the leaderboard."""
+    try:
+        resp = requests.get(f"{API}/v1/agents/leaderboard", timeout=15)
+        resp.raise_for_status()
+        for entry in resp.json():
+            if entry.get("name") == agent["name"]:
+                return float(entry.get("gns_balance", 0))
+    except Exception as e:
+        print(f"  [{agent['name']}] Failed to fetch balance: {e}")
+    return None
 
 
 def pick_market(agent, markets):
@@ -254,6 +269,11 @@ def run_cycle(markets):
     agents_this_round = random.sample(AGENTS, min(num_bets, len(AGENTS)))
 
     for agent in agents_this_round:
+        balance = fetch_balance(agent)
+        if balance is not None and balance < MIN_BALANCE:
+            print(f"  [{agent['name']}] Balance {balance:.0f} GNS below {MIN_BALANCE} GNS minimum, skipping.")
+            continue
+
         market = pick_market(agent, markets)
         if not market:
             print(f"  [{agent['name']}] No suitable markets found, skipping.")
