@@ -26,8 +26,9 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     // API fetch succeeded — clear circuit breaker
     await recordApiSuccess(redis);
 
+    let inserted = 0;
     for (const m of markets) {
-      await db.query(
+      const { rows: upserted } = await db.query(
         `INSERT INTO markets
            (polymarket_id, question, category, slug, polymarket_url, volume,
             b_parameter, outcomes, quantities, initial_probs, closes_at)
@@ -38,8 +39,10 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
            slug           = EXCLUDED.slug,
            polymarket_url = EXCLUDED.polymarket_url,
            closes_at      = EXCLUDED.closes_at,
+           resolved       = false,
            updated_at     = NOW()
          -- Do NOT overwrite quantities — they track live LMSR state
+         RETURNING (xmax = 0) AS is_new
          `,
         [
           m.polymarket_id,
@@ -56,9 +59,10 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         ]
       );
       synced++;
+      if (upserted[0]?.is_new) inserted++;
     }
 
-    console.log(`[cron] Synced ${synced} markets from API.`);
+    console.log(`[cron] Synced ${synced} markets from API (${inserted} new, ${synced - inserted} updated).`);
 
     // Reclassify ALL markets in DB using the latest classification rules
     const { rows } = await db.query('SELECT id, question, category FROM markets');
