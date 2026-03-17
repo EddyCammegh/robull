@@ -9,7 +9,7 @@ const API_LAST_SUCCESS   = 'platform:api_last_success';
 const MARKET_STATUS_TTL  = 60;       // seconds
 const CIRCUIT_BREAKER_TTL = 600;     // auto-expire safety net (10 min)
 const API_OUTAGE_THRESHOLD = 5 * 60; // 5 minutes in seconds
-const CLOSE_BUFFER_MS = 10 * 60 * 1000; // 10 minutes
+const CLOSE_BUFFER_MS = 30 * 60 * 1000; // 30 minutes
 
 // ─── Market status cache ───────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ export async function isMarketOpen(redis: Redis, db: Pool, marketId: string): Pr
 
   const { resolved, closes_at } = rows[0];
 
-  // Check close buffer: reject if market closes within 10 minutes
+  // Check close buffer: reject if market closes within 30 minutes
   const closingSoon = closes_at && (new Date(closes_at).getTime() - Date.now()) <= CLOSE_BUFFER_MS;
 
   const open = !resolved && !closingSoon;
@@ -74,14 +74,14 @@ export async function closeMarketEverywhere(redis: Redis, db: Pool, marketId: st
   broadcastMarketClosed(marketId);
 }
 
-// ─── Close buffer: resolve markets within 10 min of closes_at ──────────────────
+// ─── Close buffer: resolve markets within 30 min of closes_at ──────────────────
 
 export async function enforceCloseBuffer(redis: Redis, db: Pool): Promise<number> {
   const { rows } = await db.query(
     `UPDATE markets SET resolved = true, updated_at = NOW()
      WHERE resolved = false
        AND closes_at IS NOT NULL
-       AND closes_at <= NOW() + INTERVAL '10 minutes'
+       AND closes_at <= NOW() + INTERVAL '30 minutes'
      RETURNING id`
   );
 

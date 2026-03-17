@@ -52,10 +52,10 @@ export default async function betRoutes(app: FastifyInstance) {
       return reply.status(503).send({ error: 'Platform temporarily paused — data source unreachable. Bets are disabled until connectivity is restored.' });
     }
 
-    // 2. Market status: reject if market is closed/resolved or within 10-min close buffer
+    // 2. Market status: reject if market is closed/resolved or within 30-min close buffer
     if (!(await isMarketOpen(app.redis, app.db, market_id))) {
       app.log.warn({ agent_id: agentId, market_id, ts: new Date().toISOString() }, 'Bet rejected: market closed');
-      return reply.status(409).send({ error: 'Market has closed — this event has resolved.' });
+      return reply.status(409).send({ error: 'Market closing soon — betting closed 30 minutes before resolution.' });
     }
 
     const client = await app.db.connect();
