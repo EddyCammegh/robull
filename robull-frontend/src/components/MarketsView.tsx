@@ -69,7 +69,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
     }
   });
 
-  const filtered = useMemo(() => {
+  const { active, resolved } = useMemo(() => {
     const base = markets.filter((m) => {
       if (category && m.category !== category) return false;
       if (search) {
@@ -78,18 +78,25 @@ export default function MarketsView({ markets }: MarketsViewProps) {
       }
       return true;
     });
-    return sortMarkets(base, sortKey);
+    const act = sortMarkets(base.filter(m => !m.resolved), sortKey);
+    const res = base.filter(m => m.resolved).sort((a, b) =>
+      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+    return { active: act, resolved: res };
   }, [markets, category, search, sortKey]);
 
-  // Reset visible count when filters change
-  const shown = filtered.slice(0, visible);
-  const hasMore = visible < filtered.length;
+  const allFiltered = active.length + resolved.length;
+  const shown = active.slice(0, visible);
+  const hasMore = visible < active.length;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-6 flex items-baseline gap-3">
         <h1 className="font-heading text-4xl text-white">MARKETS</h1>
-        <span className="font-mono text-sm text-muted">{filtered.length} open</span>
+        <span className="font-mono text-sm text-muted">{active.length} active</span>
+        {resolved.length > 0 && (
+          <span className="font-mono text-sm text-muted">· {resolved.length} resolved</span>
+        )}
       </div>
 
       {/* Filters row */}
@@ -135,29 +142,52 @@ export default function MarketsView({ markets }: MarketsViewProps) {
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {allFiltered === 0 ? (
         <div className="card p-8 text-center">
           <p className="font-mono text-sm text-muted">No markets match your filters.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {shown.map((market) => (
-            <MarketRow
-              key={market.id}
-              market={market}
-              liveProbs={liveProbs[market.id]}
-            />
-          ))}
-        </div>
-      )}
+        <>
+          {/* Active markets */}
+          <div className="space-y-2">
+            {shown.map((market) => (
+              <MarketRow
+                key={market.id}
+                market={market}
+                liveProbs={liveProbs[market.id]}
+              />
+            ))}
+          </div>
 
-      {hasMore && (
-        <button
-          onClick={() => setVisible((v) => v + PAGE_SIZE)}
-          className="mt-4 w-full rounded border border-border py-2 font-mono text-xs text-muted hover:border-accent hover:text-accent transition-colors"
-        >
-          SHOW MORE ({filtered.length - visible} remaining)
-        </button>
+          {hasMore && (
+            <button
+              onClick={() => setVisible((v) => v + PAGE_SIZE)}
+              className="mt-4 w-full rounded border border-border py-2 font-mono text-xs text-muted hover:border-accent hover:text-accent transition-colors"
+            >
+              SHOW MORE ({active.length - visible} remaining)
+            </button>
+          )}
+
+          {/* Recently resolved markets */}
+          {resolved.length > 0 && (
+            <>
+              <div className="mt-8 mb-4 flex items-center gap-3">
+                <div className="flex-1 h-px bg-border" />
+                <span className="font-mono text-xs text-muted font-bold tracking-widest">RECENTLY RESOLVED</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="space-y-2 opacity-75">
+                {resolved.map((market) => (
+                  <MarketRow
+                    key={market.id}
+                    market={market}
+                    liveProbs={liveProbs[market.id]}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
 
       <p className="mt-6 font-mono text-[10px] text-muted text-center">

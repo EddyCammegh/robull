@@ -5,9 +5,10 @@ export default async function marketRoutes(app: FastifyInstance) {
 
   // GET /v1/markets
   app.get('/', async (req, reply) => {
-    const { category, resolved } = req.query as {
+    const { category, resolved, include_recent } = req.query as {
       category?: string;
       resolved?: string;
+      include_recent?: string;
     };
 
     let query = `
@@ -35,7 +36,12 @@ export default async function marketRoutes(app: FastifyInstance) {
       conditions.push(`m.category = $${params.length}`);
     }
 
-    conditions.push(`m.resolved = ${resolved === 'true' ? 'true' : 'false'}`);
+    // include_recent=12h: fetch active markets + recently resolved (last 12h)
+    if (include_recent === '12h') {
+      conditions.push(`(m.resolved = false OR (m.resolved = true AND m.updated_at >= NOW() - INTERVAL '12 hours'))`);
+    } else {
+      conditions.push(`m.resolved = ${resolved === 'true' ? 'true' : 'false'}`);
+    }
 
     query += ` WHERE ${conditions.join(' AND ')} GROUP BY m.id ORDER BY m.volume DESC`;
 

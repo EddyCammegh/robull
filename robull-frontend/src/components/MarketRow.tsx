@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useMarketClick } from './MarketClickProvider';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
+import OutcomeBadge from './OutcomeBadge';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -25,7 +26,9 @@ function countryFlag(code: string): string {
     .replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
 }
 
-function ExpandableBet({ bet, outcomes }: { bet: Bet; outcomes: string[] }) {
+function ExpandableBet({ bet, outcomes, marketResolved, winningOutcome }: {
+  bet: Bet; outcomes: string[]; marketResolved?: boolean; winningOutcome?: number | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   const reasoning = bet.reasoning ?? '';
   const LIMIT     = 300;
@@ -56,6 +59,17 @@ function ExpandableBet({ bet, outcomes }: { bet: Bet; outcomes: string[] }) {
           </span>
         </span>
       </div>
+
+      {/* Outcome result */}
+      <OutcomeBadge
+        settled={bet.settled}
+        marketResolved={marketResolved ?? false}
+        winningOutcome={winningOutcome}
+        outcomeIndex={bet.outcome_index}
+        outcomes={outcomes}
+        gnsWagered={bet.gns_wagered}
+        gnsReturned={bet.gns_returned}
+      />
 
       {/* Confidence bar */}
       <div className="flex items-center gap-2">
@@ -101,6 +115,7 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
   const { openMarket } = useMarketClick();
   const probs    = liveProbs ?? market.current_probs ?? market.initial_probs ?? [];
   const category = market.category as MarketCategory;
+  const isNew    = !market.resolved && (Date.now() - new Date(market.created_at).getTime()) < 2 * 60 * 60 * 1000;
 
   // Fetch bets once when first expanded — never refetch
   useEffect(() => {
@@ -121,7 +136,17 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {market.split && (
+            {market.resolved && market.winning_outcome != null && (
+              <span className="rounded bg-green-500/15 border border-green-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-green-400 flex-shrink-0">
+                RESOLVED: {market.outcomes[market.winning_outcome]} ✓
+              </span>
+            )}
+            {!market.resolved && isNew && (
+              <span className="rounded bg-blue-500/15 border border-blue-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-blue-400 flex-shrink-0">
+                NEW
+              </span>
+            )}
+            {market.split && !market.resolved && (
               <span className="rounded bg-accent/20 border border-accent/50 px-1.5 py-0.5 font-mono text-[9px] font-bold text-accent flex-shrink-0">
                 SPLIT
               </span>
@@ -136,7 +161,10 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
             </span>
             <span
               onClick={(e) => { e.stopPropagation(); openMarket(market.id, market); }}
-              className="font-body text-sm text-white font-medium truncate hover:text-accent transition-colors cursor-pointer"
+              className={clsx(
+                'font-body text-sm font-medium truncate hover:text-accent transition-colors cursor-pointer',
+                market.resolved ? 'text-muted' : 'text-white'
+              )}
             >
               {market.question}
             </span>
@@ -213,7 +241,7 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
           ) : bets.length > 0 ? (
             <div className="space-y-2">
               {bets.map((bet) => (
-                <ExpandableBet key={bet.id} bet={bet} outcomes={market.outcomes} />
+                <ExpandableBet key={bet.id} bet={bet} outcomes={market.outcomes} marketResolved={market.resolved} winningOutcome={market.winning_outcome} />
               ))}
             </div>
           ) : (

@@ -50,8 +50,9 @@ export { fixBetNumerics, fixMarketNumerics, fixAgentNumerics };
 export const api = {
   markets: {
     list: async (params?: { category?: string }) => {
-      const qs = params?.category ? `?category=${params.category}` : '';
-      const raw = await get<any[]>(`/v1/markets${qs}`);
+      const qs = new URLSearchParams({ include_recent: '12h' });
+      if (params?.category) qs.set('category', params.category);
+      const raw = await get<any[]>(`/v1/markets?${qs}`);
       return raw.map(fixMarketNumerics);
     },
     get: async (id: string) => {

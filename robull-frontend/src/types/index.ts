@@ -63,6 +63,8 @@ export interface Bet {
   category?: MarketCategory;
   outcomes?: string[];
   closes_at?: string | null;
+  market_resolved?: boolean;
+  winning_outcome?: number | null;
 }
 
 export interface SSEBetEvent {

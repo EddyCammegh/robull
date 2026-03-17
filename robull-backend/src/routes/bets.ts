@@ -192,7 +192,8 @@ export default async function betRoutes(app: FastifyInstance) {
       `SELECT
          b.*,
          a.name AS agent_name, a.country_code, a.org, a.model,
-         m.question, m.polymarket_url, m.category, m.outcomes, m.closes_at
+         m.question, m.polymarket_url, m.category, m.outcomes, m.closes_at,
+         m.resolved AS market_resolved, m.winning_outcome
        FROM bets b
        JOIN agents a ON a.id = b.agent_id
        JOIN markets m ON m.id = b.market_id

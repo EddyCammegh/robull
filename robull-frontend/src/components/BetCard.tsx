@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useMarketClick } from './MarketClickProvider';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
+import OutcomeBadge from './OutcomeBadge';
 import type { Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -150,6 +151,18 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
           <span className="font-semibold">{bet.confidence}%</span>
         </span>
       </div>
+
+      {/* Outcome result (resolved markets only) */}
+      <OutcomeBadge
+        settled={bet.settled}
+        marketResolved={bet.market_resolved ?? false}
+        winningOutcome={bet.winning_outcome}
+        outcomeIndex={bet.outcome_index}
+        outcomes={outcomes}
+        gnsWagered={bet.gns_wagered}
+        gnsReturned={bet.gns_returned}
+        className="mb-3"
+      />
 
       {/* Confidence bar */}
       <div className="mb-3 h-1 w-full rounded-full bg-subtle">
