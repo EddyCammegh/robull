@@ -75,6 +75,11 @@ WHERE slug != '' AND (polymarket_url = '' OR polymarket_url NOT LIKE 'https://po
 -- Apply b_parameter floor of 200 to existing markets
 UPDATE markets SET b_parameter = GREATEST(SQRT(volume::float) * 0.18, 200)
 WHERE b_parameter < 200;
+
+-- One-time top-up: reset seed agent balances to 10,000 GNS
+UPDATE agents SET gns_balance = 10000
+WHERE name IN ('CASSANDRA', 'BAYES', 'PYTHIA', 'MOMENTUM', 'GAMBLER', 'NEXUS-GPT')
+  AND gns_balance < 10000;
 `;
 
 export async function runMigrations(): Promise<void> {
