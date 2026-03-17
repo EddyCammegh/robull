@@ -3,11 +3,24 @@ import type Redis from 'ioredis';
 import { fetchPolymarkets, classifyCategory, isLowQualityMarket } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
 
+async function logCategoryCounts(db: Pool, label: string): Promise<void> {
+  const { rows } = await db.query(
+    `SELECT category, COUNT(*)::int AS count
+     FROM markets WHERE resolved = false
+     GROUP BY category ORDER BY count DESC`
+  );
+  const total = rows.reduce((s, r) => s + r.count, 0);
+  const summary = rows.map(r => `${r.category}=${r.count}`).join(' ');
+  console.log(`[cron] ${label}: ${summary} TOTAL=${total}`);
+}
+
 export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
   console.log('[cron] Syncing markets from Polymarket...');
   let synced = 0;
 
   try {
+    await logCategoryCounts(db, 'Before sync');
+
     const markets = await fetchPolymarkets();
 
     // API fetch succeeded — clear circuit breaker
@@ -87,6 +100,8 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     if (buffered > 0) {
       console.log(`[cron] Close buffer resolved ${buffered} markets.`);
     }
+
+    await logCategoryCounts(db, 'After sync');
   } catch (err) {
     // API fetch failed — record failure for circuit breaker
     await recordApiFailure(redis).catch(() => {});

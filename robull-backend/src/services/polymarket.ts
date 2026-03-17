@@ -363,7 +363,7 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
   const allMarkets: GammaMarket[] = [];
 
   for (let offset = 0; offset < TARGET_MARKETS; offset += PAGE_SIZE) {
-    const url = `${GAMMA_API}/markets?active=true&closed=false&limit=${PAGE_SIZE}&offset=${offset}&order=endDate&ascending=true`;
+    const url = `${GAMMA_API}/markets?active=true&closed=false&limit=${PAGE_SIZE}&offset=${offset}&order=volume&ascending=false`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
     const page = await res.json() as GammaMarket[];
@@ -424,6 +424,14 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
       closes_at: m.endDate ?? null,
     });
   }
+
+  // Sort by closes_at ascending so markets closing soonest are prioritised
+  results.sort((a, b) => {
+    if (!a.closes_at && !b.closes_at) return 0;
+    if (!a.closes_at) return 1;   // nulls last
+    if (!b.closes_at) return -1;
+    return new Date(a.closes_at).getTime() - new Date(b.closes_at).getTime();
+  });
 
   return results;
 }
