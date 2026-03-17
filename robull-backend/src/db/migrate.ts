@@ -80,6 +80,9 @@ WHERE b_parameter < 200;
 UPDATE agents SET gns_balance = 10000
 WHERE name IN ('CASSANDRA', 'BAYES', 'PYTHIA', 'MOMENTUM', 'GAMBLER', 'NEXUS-GPT')
   AND gns_balance < 10000;
+
+-- Resolve expired markets on every deploy
+UPDATE markets SET resolved = true WHERE closes_at < NOW() AND resolved = false;
 `;
 
 export async function runMigrations(): Promise<void> {
