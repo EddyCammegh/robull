@@ -3,6 +3,7 @@ import { computeB, bootstrapQuantities } from './lmsr.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const MIN_VOLUME = Number(process.env.MARKET_MIN_VOLUME ?? 500_000);
+const MIN_VOLUME_CRYPTO_MACRO = Number(process.env.MARKET_MIN_VOLUME_CRYPTO_MACRO ?? 50_000);
 
 interface GammaEvent {
   id: string;
@@ -375,7 +376,8 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
 
   for (const m of markets) {
     const volume = parseFloat(m.volume ?? '0');
-    if (volume < MIN_VOLUME) continue;
+    // Quick gate: skip anything below the lowest possible threshold
+    if (volume < MIN_VOLUME_CRYPTO_MACRO) continue;
     if (!m.active || m.closed) continue;
 
     let outcomes: string[];
@@ -396,6 +398,11 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
     // Filter out low-quality markets
     if (isLowQualityMarket(m.question, initialProbs)) continue;
 
+    // Category-aware volume threshold: $50k for CRYPTO/MACRO, $500k for all others
+    const category = classifyCategory(m.question, m.tags);
+    const minVol = (category === 'CRYPTO' || category === 'MACRO') ? MIN_VOLUME_CRYPTO_MACRO : MIN_VOLUME;
+    if (volume < minVol) continue;
+
     const b = computeB(volume);
     const quantities = bootstrapQuantities(initialProbs, b);
 
@@ -406,7 +413,7 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
     results.push({
       polymarket_id: m.id,
       question: m.question,
-      category: classifyCategory(m.question, m.tags),
+      category,
       slug: eventSlug,
       polymarket_url: eventSlug ? `https://polymarket.com/event/${eventSlug}` : '',
       volume,

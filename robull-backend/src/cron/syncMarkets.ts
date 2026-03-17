@@ -62,15 +62,18 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     }
 
     // ── Cleanup: resolve existing markets that fail the new filters ──────────
-    const MIN_VOLUME = 500_000;
+    const MIN_VOL_DEFAULT = 500_000;
+    const MIN_VOL_CRYPTO_MACRO = 50_000;
     const { rows: allMarkets } = await db.query(
-      `SELECT id, question, volume, initial_probs FROM markets WHERE resolved = false`
+      `SELECT id, question, category, volume, initial_probs FROM markets WHERE resolved = false`
     );
     let cleaned = 0;
     for (const row of allMarkets) {
       const vol = typeof row.volume === 'string' ? parseFloat(row.volume) : row.volume;
       const probs: number[] = Array.isArray(row.initial_probs) ? row.initial_probs : [];
-      if (vol < MIN_VOLUME || isLowQualityMarket(row.question, probs)) {
+      const cat = row.category as string;
+      const minVol = (cat === 'CRYPTO' || cat === 'MACRO') ? MIN_VOL_CRYPTO_MACRO : MIN_VOL_DEFAULT;
+      if (vol < minVol || isLowQualityMarket(row.question, probs)) {
         await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
         cleaned++;
       }
