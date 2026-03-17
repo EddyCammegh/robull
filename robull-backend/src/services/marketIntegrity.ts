@@ -13,27 +13,52 @@ const CLOSE_BUFFER_MS = 30 * 60 * 1000; // 30 minutes
 
 // ─── Market status cache ───────────────────────────────────────────────────────
 
-export async function isMarketOpen(redis: Redis, db: Pool, marketId: string): Promise<boolean> {
+export type MarketClosedReason = 'resolved' | 'ended' | 'closing_soon';
+
+/**
+ * Returns null if the market is open for betting, or a reason string if closed.
+ */
+export async function getMarketClosedReason(
+  redis: Redis, db: Pool, marketId: string
+): Promise<MarketClosedReason | null> {
   // Check Redis cache first
   const cached = await redis.get(MARKET_STATUS_KEY(marketId));
-  if (cached === 'open') return true;
-  if (cached === 'closed') return false;
+  if (cached === 'open') return null;
+  // Cache stores 'closed' but not the reason — skip cache for closed markets
+  // so we can return the specific reason from the DB.
 
-  // Cache miss — fall back to DB
   const { rows } = await db.query(
     'SELECT resolved, closes_at FROM markets WHERE id = $1',
     [marketId]
   );
-  if (!rows.length) return false;
+  if (!rows.length) return 'resolved';
 
   const { resolved, closes_at } = rows[0];
 
-  // Check close buffer: reject if market closes within 30 minutes
-  const closingSoon = closes_at && (new Date(closes_at).getTime() - Date.now()) <= CLOSE_BUFFER_MS;
+  if (resolved) {
+    await redis.set(MARKET_STATUS_KEY(marketId), 'closed', 'EX', MARKET_STATUS_TTL);
+    return 'resolved';
+  }
 
-  const open = !resolved && !closingSoon;
-  await redis.set(MARKET_STATUS_KEY(marketId), open ? 'open' : 'closed', 'EX', MARKET_STATUS_TTL);
-  return open;
+  if (closes_at) {
+    const timeLeft = new Date(closes_at).getTime() - Date.now();
+    if (timeLeft <= 0) {
+      await redis.set(MARKET_STATUS_KEY(marketId), 'closed', 'EX', MARKET_STATUS_TTL);
+      return 'ended';
+    }
+    if (timeLeft <= CLOSE_BUFFER_MS) {
+      await redis.set(MARKET_STATUS_KEY(marketId), 'closed', 'EX', MARKET_STATUS_TTL);
+      return 'closing_soon';
+    }
+  }
+
+  await redis.set(MARKET_STATUS_KEY(marketId), 'open', 'EX', MARKET_STATUS_TTL);
+  return null;
+}
+
+/** Convenience wrapper — preserves the old boolean API for callers that don't need the reason. */
+export async function isMarketOpen(redis: Redis, db: Pool, marketId: string): Promise<boolean> {
+  return (await getMarketClosedReason(redis, db, marketId)) === null;
 }
 
 export async function setMarketStatus(redis: Redis, marketId: string, status: 'open' | 'closed'): Promise<void> {
