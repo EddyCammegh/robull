@@ -27,21 +27,22 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     await recordApiSuccess(redis);
 
     let inserted = 0;
+    const fetchedIds = new Set<string>();
     for (const m of markets) {
+      fetchedIds.add(m.polymarket_id);
       const { rows: upserted } = await db.query(
         `INSERT INTO markets
            (polymarket_id, question, category, slug, polymarket_url, volume,
-            b_parameter, outcomes, quantities, initial_probs, closes_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            b_parameter, outcomes, quantities, initial_probs, closes_at, resolved)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, true)
          ON CONFLICT (polymarket_id) DO UPDATE SET
            volume         = EXCLUDED.volume,
            category       = EXCLUDED.category,
            slug           = EXCLUDED.slug,
            polymarket_url = EXCLUDED.polymarket_url,
            closes_at      = EXCLUDED.closes_at,
-           resolved       = false,
            updated_at     = NOW()
-         -- Do NOT overwrite quantities — they track live LMSR state
+         -- Do NOT overwrite quantities or resolved — managed by backfill
          RETURNING (xmax = 0) AS is_new
          `,
         [
@@ -103,6 +104,49 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     const buffered = await enforceCloseBuffer(redis, db);
     if (buffered > 0) {
       console.log(`[cron] Close buffer resolved ${buffered} markets.`);
+    }
+
+    // ── Backfill / trim: maintain exactly 150 active markets ─────────────
+    const TARGET_ACTIVE = 150;
+    const { rows: [{ count: activeCount }] } = await db.query(
+      `SELECT COUNT(*)::int AS count FROM markets WHERE resolved = false`
+    );
+
+    if (activeCount < TARGET_ACTIVE) {
+      const slots = TARGET_ACTIVE - activeCount;
+      // Best candidates: resolved, still in current API fetch (confirmed active
+      // on Polymarket), ordered by volume so highest-signal markets fill first.
+      const { rows: candidates } = await db.query(
+        `SELECT id, polymarket_id FROM markets
+         WHERE resolved = true
+         ORDER BY volume DESC`
+      );
+      let activated = 0;
+      for (const c of candidates) {
+        if (activated >= slots) break;
+        if (!fetchedIds.has(c.polymarket_id)) continue;
+        await db.query(
+          'UPDATE markets SET resolved = false, updated_at = NOW() WHERE id = $1',
+          [c.id]
+        );
+        activated++;
+      }
+      if (activated > 0) {
+        console.log(`[cron] Backfill: activated ${activated} markets (${activeCount} → ${activeCount + activated}).`);
+      }
+    } else if (activeCount > TARGET_ACTIVE) {
+      const excess = activeCount - TARGET_ACTIVE;
+      await db.query(
+        `UPDATE markets SET resolved = true, updated_at = NOW()
+         WHERE id IN (
+           SELECT id FROM markets
+           WHERE resolved = false
+           ORDER BY volume ASC
+           LIMIT $1
+         )`,
+        [excess]
+      );
+      console.log(`[cron] Trimmed ${excess} lowest-volume markets (${activeCount} → ${TARGET_ACTIVE}).`);
     }
 
     await logCategoryCounts(db, 'After sync');
