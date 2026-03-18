@@ -98,9 +98,14 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                   <CountdownTimer closesAt={market.closes_at} resolved={market.resolved} />
                 )}
               </div>
-              {market.event_title && market.event_title !== market.question && (
-                <p className="font-mono text-xs text-muted mb-1">{market.event_title}</p>
-              )}
+              {(() => {
+                const et = market.event_title ?? '';
+                const q = market.question;
+                const show = et.length > 0 && et !== q
+                  && !q.toLowerCase().includes(et.toLowerCase())
+                  && !et.toLowerCase().includes(q.toLowerCase());
+                return show ? <p className="font-mono text-xs text-muted mb-1">{et}</p> : null;
+              })()}
               <h2 className="font-heading text-2xl text-white leading-tight">{market.question}</h2>
             </div>
             <button onClick={onClose} className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white hover:bg-subtle/50 text-lg font-mono transition-colors">x</button>

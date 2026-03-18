@@ -117,6 +117,14 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
   const category = market.category as MarketCategory;
   const isNew    = !market.resolved && (Date.now() - new Date(market.created_at).getTime()) < 2 * 60 * 60 * 1000;
 
+  // Only show event title if it adds new context (e.g. opponent in a match),
+  // not when it just repeats or abbreviates the question.
+  const et = market.event_title ?? '';
+  const q = market.question;
+  const showEventTitle = et.length > 0 && et !== q
+    && !q.toLowerCase().includes(et.toLowerCase())
+    && !et.toLowerCase().includes(q.toLowerCase());
+
   // Fetch bets once when first expanded — never refetch
   useEffect(() => {
     if (!open || fetched) return;
@@ -163,7 +171,7 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
               onClick={(e) => { e.stopPropagation(); openMarket(market.id, market); }}
               className="min-w-0 truncate hover:text-accent transition-colors cursor-pointer"
             >
-              {market.event_title && market.event_title !== market.question && (
+              {showEventTitle && (
                 <span className={clsx('font-mono text-[10px] mr-1.5', market.resolved ? 'text-muted/70' : 'text-muted')}>
                   {market.event_title} ·
                 </span>
