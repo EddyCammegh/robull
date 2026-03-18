@@ -83,7 +83,7 @@ export default function EventRow({ event }: { event: RobullEvent }) {
                   <div
                     className="h-full rounded transition-all duration-500"
                     style={{
-                      width: `${Math.max((outcome.probability / Math.max(maxProb, 0.01)) * 100, 1)}%`,
+                      width: maxProb > 0 ? `${(outcome.probability / maxProb) * 100}%` : '0%',
                       background: i === 0 ? '#ff4400' : i === 1 ? '#cc3600' : '#555555',
                     }}
                   />
