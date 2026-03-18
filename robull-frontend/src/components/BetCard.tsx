@@ -133,7 +133,18 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
           <p className="font-mono text-xs text-gray-200 leading-relaxed line-clamp-2 flex-1">
             {question}
           </p>
-          <CountdownTimer closesAt={bet.closes_at} size="md" className="flex-shrink-0 mt-0.5" />
+          {bet.market_resolved && bet.winning_outcome != null ? (
+            <span className={clsx(
+              'rounded px-1.5 py-0.5 font-mono text-xs font-bold border flex-shrink-0 mt-0.5',
+              bet.outcome_index === bet.winning_outcome
+                ? 'bg-green-500/15 border-green-500/40 text-green-400'
+                : 'bg-red-500/15 border-red-500/40 text-red-400'
+            )}>
+              {bet.outcome_index === bet.winning_outcome ? '✓ WON' : '✗ LOST'}
+            </span>
+          ) : (
+            <CountdownTimer closesAt={bet.closes_at} size="md" className="flex-shrink-0 mt-0.5" />
+          )}
         </div>
       </button>
 
