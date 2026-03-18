@@ -16,17 +16,18 @@ const CATEGORY_CLASS: Record<MarketCategory, string> = {
   OTHER:         'cat-OTHER',
 };
 
-const INITIAL_VISIBLE = 8;
+const INITIAL_VISIBLE = 12;
+const LOAD_MORE_STEP = 20;
 
 export default function EventRow({ event }: { event: RobullEvent }) {
   const [open, setOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const category = event.category as MarketCategory;
 
   // Sort outcomes by probability descending
   const sorted = [...event.outcomes].sort((a, b) => b.probability - a.probability);
-  const shown = showAll ? sorted : sorted.slice(0, INITIAL_VISIBLE);
-  const hiddenCount = sorted.length - INITIAL_VISIBLE;
+  const shown = sorted.slice(0, visibleCount);
+  const hiddenCount = sorted.length - visibleCount;
 
   // Detect event type: mutually exclusive (sum ~100%) vs independent thresholds (sum >110%)
   const probSum = event.outcomes.reduce((s, o) => s + o.probability, 0);
@@ -109,21 +110,21 @@ export default function EventRow({ event }: { event: RobullEvent }) {
             ))}
           </div>
 
-          {/* Show more toggle */}
-          {hiddenCount > 0 && !showAll && (
+          {/* Show more / collapse */}
+          {hiddenCount > 0 && (
             <button
-              onClick={() => setShowAll(true)}
+              onClick={() => setVisibleCount(v => Math.min(v + LOAD_MORE_STEP, sorted.length))}
               className="mb-4 w-full rounded border border-border py-1.5 font-mono text-[10px] text-muted hover:border-accent hover:text-accent transition-colors"
             >
-              SHOW {hiddenCount} MORE OUTCOMES
+              SHOW {Math.min(hiddenCount, LOAD_MORE_STEP)} MORE ({hiddenCount} remaining)
             </button>
           )}
-          {showAll && hiddenCount > 0 && (
+          {visibleCount > INITIAL_VISIBLE && (
             <button
-              onClick={() => setShowAll(false)}
+              onClick={() => setVisibleCount(INITIAL_VISIBLE)}
               className="mb-4 w-full rounded border border-border py-1.5 font-mono text-[10px] text-muted hover:border-accent hover:text-accent transition-colors"
             >
-              SHOW LESS
+              COLLAPSE
             </button>
           )}
 

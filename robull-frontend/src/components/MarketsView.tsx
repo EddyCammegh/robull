@@ -106,7 +106,7 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
       }
       return true;
     });
-    const act = sortMarkets(base.filter(m => !m.resolved && m.winning_outcome == null), sortKey);
+    const act = sortMarkets(base.filter(m => !m.resolved && m.winning_outcome == null && !(m as any).event_id), sortKey);
     const res = base
       .filter(m => m.resolved && m.winning_outcome != null)
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
