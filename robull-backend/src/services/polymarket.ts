@@ -475,3 +475,33 @@ export async function fetchMarketStatus(polymarketId: string): Promise<MarketSta
     return null;
   }
 }
+
+// ─── Bulk fetch recently settled markets from Polymarket ────────────────────
+
+export interface SettledMarketResult {
+  polymarketId: string;
+  winningOutcome: number | null;
+}
+
+/**
+ * Fetch markets that Polymarket has actually settled (closed=true).
+ * Returns polymarket IDs and their winning outcomes.
+ */
+export async function fetchRecentlySettledMarkets(): Promise<SettledMarketResult[]> {
+  try {
+    const res = await fetch(
+      `${GAMMA_API}/markets?closed=true&limit=100&order=updatedAt&ascending=false`
+    );
+    if (!res.ok) return [];
+    const data = await res.json() as GammaMarket[];
+    return data
+      .filter(m => m.closed)
+      .map(m => ({
+        polymarketId: m.id,
+        winningOutcome: resolveWinningOutcome(m.outcomePrices),
+      }))
+      .filter(m => m.winningOutcome != null);
+  } catch {
+    return [];
+  }
+}
