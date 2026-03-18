@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
-import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchRecentlySettledMarkets } from '../services/polymarket.js';
+import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchRecentlySettledMarkets, fetchMarketStatus } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
@@ -106,11 +106,15 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       console.log(`[cron] Close buffer resolved ${buffered} markets.`);
     }
 
-    // ── Backfill winning outcomes from Polymarket's settled markets ────────
-    // Fetch the 100 most recently settled markets from Polymarket and match
-    // them against our DB. This is the reverse of the old approach — instead
-    // of asking Polymarket about OUR resolved markets (which may not be
-    // settled there yet), we ask Polymarket what IT has settled and update ours.
+    // ── Backfill winning outcomes ──────────────────────────────────────────
+    // Two-pronged approach:
+    //   A) Bulk: fetch 100 recently settled markets FROM Polymarket, match to our DB
+    //   B) Per-market: check our own resolved markets individually (catches ones
+    //      not in the top 100 settled list)
+
+    let totalFilled = 0;
+
+    // --- A) Bulk match from Polymarket's recently settled ---
     const settled = await fetchRecentlySettledMarkets();
     if (settled.length > 0) {
       const settledMap = new Map(settled.map(s => [s.polymarketId, s.winningOutcome]));
@@ -120,7 +124,6 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
          WHERE polymarket_id = ANY($1) AND winning_outcome IS NULL`,
         [polyIds]
       );
-      let filled = 0;
       for (const m of dbMatches) {
         const winner = settledMap.get(m.polymarket_id);
         if (winner != null) {
@@ -128,11 +131,36 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
             'UPDATE markets SET winning_outcome = $2, resolved = true, updated_at = NOW() WHERE id = $1',
             [m.id, winner]
           );
-          console.log(`[backfill] Set winning_outcome=${winner} for "${m.question?.slice(0, 60)}"`);
-          filled++;
+          console.log(`[backfill:bulk] winning_outcome=${winner} for "${m.question?.slice(0, 60)}"`);
+          totalFilled++;
         }
       }
-      console.log(`[cron] Backfill: ${settled.length} settled on Polymarket, ${dbMatches.length} matched our DB, ${filled} updated.`);
+      console.log(`[cron] Backfill bulk: ${settled.length} settled on Polymarket, ${dbMatches.length} matched our DB.`);
+    }
+
+    // --- B) Per-market check for our resolved markets still missing outcome ---
+    const { rows: missingOutcome } = await db.query(
+      `SELECT id, polymarket_id, question FROM markets
+       WHERE resolved = true AND winning_outcome IS NULL
+       ORDER BY updated_at DESC LIMIT 20`
+    );
+    if (missingOutcome.length > 0) {
+      for (const m of missingOutcome) {
+        const status = await fetchMarketStatus(m.polymarket_id);
+        if (status?.winningOutcome != null) {
+          await db.query(
+            'UPDATE markets SET winning_outcome = $2, updated_at = NOW() WHERE id = $1',
+            [m.id, status.winningOutcome]
+          );
+          console.log(`[backfill:per-market] winning_outcome=${status.winningOutcome} for "${m.question?.slice(0, 60)}"`);
+          totalFilled++;
+        }
+      }
+      console.log(`[cron] Backfill per-market: checked ${missingOutcome.length}, still awaiting Polymarket settlement.`);
+    }
+
+    if (totalFilled > 0) {
+      console.log(`[cron] Backfill total: ${totalFilled} winning outcomes set.`);
     }
 
     // ── Backfill / trim: maintain exactly 150 active markets ─────────────
