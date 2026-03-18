@@ -442,6 +442,21 @@ export interface MarketStatusResult {
   active: boolean;
   closed: boolean;
   endDate: string | null;
+  winningOutcome: number | null; // index of the outcome with price "1", or null if not yet resolved
+}
+
+/**
+ * Determine winning outcome from post-resolution outcomePrices.
+ * After resolution, the winning outcome has price "1" (or very close to 1).
+ */
+function resolveWinningOutcome(outcomePrices: string): number | null {
+  try {
+    const prices = JSON.parse(outcomePrices).map(Number) as number[];
+    const winnerIdx = prices.findIndex(p => p >= 0.99);
+    return winnerIdx >= 0 ? winnerIdx : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchMarketStatus(polymarketId: string): Promise<MarketStatusResult | null> {
@@ -449,7 +464,13 @@ export async function fetchMarketStatus(polymarketId: string): Promise<MarketSta
     const res = await fetch(`${GAMMA_API}/markets/${polymarketId}`);
     if (!res.ok) return null;
     const data = await res.json() as GammaMarket;
-    return { active: data.active, closed: data.closed, endDate: data.endDate ?? null };
+    const isClosed = data.closed;
+    return {
+      active: data.active,
+      closed: isClosed,
+      endDate: data.endDate ?? null,
+      winningOutcome: isClosed ? resolveWinningOutcome(data.outcomePrices) : null,
+    };
   } catch {
     return null;
   }

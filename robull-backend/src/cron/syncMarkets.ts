@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
-import { fetchPolymarkets, classifyCategory, isLowQualityMarket } from '../services/polymarket.js';
+import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchMarketStatus } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
@@ -104,6 +104,29 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     const buffered = await enforceCloseBuffer(redis, db);
     if (buffered > 0) {
       console.log(`[cron] Close buffer resolved ${buffered} markets.`);
+    }
+
+    // ── Backfill winning outcomes for resolved markets missing them ────────
+    const { rows: missingOutcome } = await db.query(
+      `SELECT id, polymarket_id FROM markets
+       WHERE resolved = true AND winning_outcome IS NULL
+       ORDER BY updated_at DESC LIMIT 20`
+    );
+    if (missingOutcome.length > 0) {
+      let filled = 0;
+      for (const m of missingOutcome) {
+        const status = await fetchMarketStatus(m.polymarket_id);
+        if (status?.winningOutcome != null) {
+          await db.query(
+            'UPDATE markets SET winning_outcome = $2, updated_at = NOW() WHERE id = $1',
+            [m.id, status.winningOutcome]
+          );
+          filled++;
+        }
+      }
+      if (filled > 0) {
+        console.log(`[cron] Backfilled winning_outcome for ${filled} resolved markets.`);
+      }
     }
 
     // ── Backfill / trim: maintain exactly 150 active markets ─────────────

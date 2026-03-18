@@ -57,7 +57,7 @@ export async function syncTier(db: Pool, redis: Redis, tier: Tier): Promise<void
       apiOk = true; // at least one API call succeeded
 
       if (!status.active || status.closed) {
-        await closeMarketEverywhere(redis, db, market.id);
+        await closeMarketEverywhere(redis, db, market.id, status.winningOutcome);
         closed++;
       } else {
         await setMarketStatus(redis, market.id, 'open');

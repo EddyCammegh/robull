@@ -90,11 +90,18 @@ export async function recordApiFailure(redis: Redis): Promise<void> {
 
 // ─── Close a market everywhere (DB + Redis + SSE) ──────────────────────────────
 
-export async function closeMarketEverywhere(redis: Redis, db: Pool, marketId: string): Promise<void> {
-  await db.query(
-    'UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1 AND resolved = false',
-    [marketId]
-  );
+export async function closeMarketEverywhere(redis: Redis, db: Pool, marketId: string, winningOutcome?: number | null): Promise<void> {
+  if (winningOutcome != null) {
+    await db.query(
+      'UPDATE markets SET resolved = true, winning_outcome = $2, updated_at = NOW() WHERE id = $1 AND resolved = false',
+      [marketId, winningOutcome]
+    );
+  } else {
+    await db.query(
+      'UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1 AND resolved = false',
+      [marketId]
+    );
+  }
   await setMarketStatus(redis, marketId, 'closed');
   broadcastMarketClosed(marketId);
 }
