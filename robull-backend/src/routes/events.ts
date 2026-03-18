@@ -72,7 +72,8 @@ export default async function eventRoutes(app: FastifyInstance) {
       };
     }));
 
-    return reply.send(result);
+    // Only return events that have at least 2 active outcomes
+    return reply.send(result.filter(e => e.outcomes.length >= 2));
   });
 
   // GET /v1/events/:id — single event with outcomes and bets
