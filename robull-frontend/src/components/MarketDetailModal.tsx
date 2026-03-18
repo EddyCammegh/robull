@@ -131,8 +131,8 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                     />
                   </div>
                   <span className={clsx(
-                    'font-mono text-xs w-20',
-                    isResolved && i === market.winning_outcome ? 'text-green-400 font-bold' : 'text-muted'
+                    'font-mono text-xs w-20 font-semibold',
+                    isResolved && i === market.winning_outcome ? 'text-green-400 font-bold' : 'text-white'
                   )}>
                     {outcome} {isResolved && i === market.winning_outcome && '✓'}
                   </span>
@@ -228,7 +228,7 @@ function BetEntry({ bet, outcomes, marketResolved, winningOutcome, expanded, onT
               : lost ? 'bg-red-500/15 border-red-500/40 text-red-400'
               : 'bg-accent/10 border-accent/30 text-accent'
           )}>
-            {won && '✓ '}{lost && '✗ '}{outcomes[bet.outcome_index] ?? bet.outcome_name}
+            {won && '✓ '}{lost && '✗ '}{(bet as any).outcome_label ?? bet.outcome_name ?? outcomes[bet.outcome_index]}
           </span>
           <span className="font-mono text-[10px] text-muted">{bet.gns_wagered.toLocaleString()} GNS</span>
           <span className="font-mono text-[10px] text-muted">{bet.confidence}%</span>
