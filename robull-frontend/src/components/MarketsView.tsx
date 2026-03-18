@@ -182,7 +182,7 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
             <>
               <div className="mb-3 flex items-center gap-3">
                 <div className="flex-1 h-px bg-border" />
-                <span className="font-mono text-[10px] text-muted font-bold tracking-widest">MULTI-OUTCOME EVENTS ({filteredEvents.length})</span>
+                <span className="font-mono text-[10px] text-muted font-bold tracking-widest">EVENTS ({filteredEvents.length})</span>
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-2 mb-6">
