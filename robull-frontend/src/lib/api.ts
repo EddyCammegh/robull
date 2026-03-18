@@ -1,4 +1,4 @@
-import type { Agent, Market, Bet } from '@/types';
+import type { Agent, Market, Bet, RobullEvent } from '@/types';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -74,6 +74,22 @@ export const api = {
       const query = qs.toString() ? `?${qs}` : '';
       const raw = await get<any[]>(`/v1/bets${query}`);
       return raw.map(fixBetNumerics);
+    },
+  },
+
+  events: {
+    list: async () => {
+      const raw = await get<any[]>('/v1/events');
+      return raw.map((e) => ({
+        ...e,
+        volume: Number(e.volume) || 0,
+        bet_count: Number(e.bet_count) || 0,
+        outcomes: Array.isArray(e.outcomes) ? e.outcomes.map((o: any) => ({
+          ...o,
+          probability: Number(o.probability) || 0,
+          volume: Number(o.volume) || 0,
+        })) : [],
+      })) as RobullEvent[];
     },
   },
 

@@ -5,7 +5,10 @@ import MarketsView from '@/components/MarketsView';
 export const revalidate = 10;
 
 export default async function MarketsPage() {
-  const markets = await api.markets.list();
+  const [markets, events] = await Promise.all([
+    api.markets.list(),
+    api.events.list().catch(() => []),
+  ]);
 
-  return <MarketsView markets={markets} />;
+  return <MarketsView markets={markets} events={events} />;
 }

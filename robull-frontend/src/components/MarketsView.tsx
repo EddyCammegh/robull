@@ -3,8 +3,9 @@
 import { useState, useMemo } from 'react';
 import clsx from 'clsx';
 import MarketRow from './MarketRow';
+import EventRow from './EventRow';
 import { useSSE } from '@/lib/sse';
-import type { Market, SSEEvent } from '@/types';
+import type { Market, RobullEvent, SSEEvent } from '@/types';
 
 const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'SPORTS', 'MACRO', 'AI/TECH', 'ENTERTAINMENT', 'OTHER'];
 const PAGE_SIZE = 50;
@@ -41,7 +42,6 @@ function sortMarkets(markets: Market[], key: SortKey): Market[] {
     case 'highest_vol':
       return sorted.sort((a, b) => b.volume - a.volume);
     case 'most_contested':
-      // Markets with split=true first, then by bet_count
       return sorted.sort((a, b) => {
         if (a.split !== b.split) return a.split ? -1 : 1;
         return (b.bet_count ?? 0) - (a.bet_count ?? 0);
@@ -53,21 +53,49 @@ function sortMarkets(markets: Market[], key: SortKey): Market[] {
 
 interface MarketsViewProps {
   markets: Market[];
+  events?: RobullEvent[];
 }
 
-export default function MarketsView({ markets }: MarketsViewProps) {
+export default function MarketsView({ markets, events = [] }: MarketsViewProps) {
   const [category,   setCategory]   = useState('');
   const [search,     setSearch]     = useState('');
   const [sortKey,    setSortKey]    = useState<SortKey>('ending_soon');
   const [visible,    setVisible]    = useState(PAGE_SIZE);
   const [liveProbs,  setLiveProbs]  = useState<Record<string, number[]>>({});
 
-  // Apply live SSE odds updates
   useSSE((event: SSEEvent) => {
     if (event.type === 'odds') {
       setLiveProbs((prev) => ({ ...prev, [event.marketId]: event.probs }));
     }
   });
+
+  // Filter events
+  const filteredEvents = useMemo(() => {
+    return events.filter((e) => {
+      if (e.resolved) return false;
+      if (e.outcomes.length < 2) return false;
+      if (category && e.category !== category) return false;
+      if (search) {
+        const kw = search.toLowerCase();
+        if (!e.title.toLowerCase().includes(kw)) return false;
+      }
+      return true;
+    }).sort((a, b) => {
+      if (sortKey === 'highest_vol') return b.volume - a.volume;
+      if (sortKey === 'most_active') return b.bet_count - a.bet_count;
+      if (sortKey === 'ending_late') {
+        if (!a.closes_at && !b.closes_at) return 0;
+        if (!a.closes_at) return -1;
+        if (!b.closes_at) return 1;
+        return new Date(b.closes_at).getTime() - new Date(a.closes_at).getTime();
+      }
+      // Default: ending soonest
+      if (!a.closes_at && !b.closes_at) return 0;
+      if (!a.closes_at) return 1;
+      if (!b.closes_at) return -1;
+      return new Date(a.closes_at).getTime() - new Date(b.closes_at).getTime();
+    });
+  }, [events, category, search, sortKey]);
 
   const { active, resolved } = useMemo(() => {
     const base = markets.filter((m) => {
@@ -86,7 +114,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
     return { active: act, resolved: res };
   }, [markets, category, search, sortKey]);
 
-  const allFiltered = active.length + resolved.length;
+  const totalActive = active.length + filteredEvents.length;
   const shown = active.slice(0, visible);
   const hasMore = visible < active.length;
 
@@ -94,7 +122,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-6 flex items-baseline gap-3">
         <h1 className="font-heading text-4xl text-white">MARKETS</h1>
-        <span className="font-mono text-sm text-muted">{active.length} active</span>
+        <span className="font-mono text-sm text-muted">{totalActive} active</span>
         {resolved.length > 0 && (
           <span className="font-mono text-sm text-muted">· {resolved.length} resolved</span>
         )}
@@ -136,29 +164,56 @@ export default function MarketsView({ markets }: MarketsViewProps) {
         </select>
         <input
           type="text"
-          placeholder="Search markets…"
+          placeholder="Search markets and events…"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setVisible(PAGE_SIZE); }}
           className="flex-1 min-w-[200px] rounded bg-surface border border-border px-3 py-2 font-mono text-xs text-white placeholder-muted focus:border-accent focus:outline-none transition-colors"
         />
       </div>
 
-      {allFiltered === 0 ? (
+      {totalActive === 0 && resolved.length === 0 ? (
         <div className="card p-8 text-center">
           <p className="font-mono text-sm text-muted">No markets match your filters.</p>
         </div>
       ) : (
         <>
-          {/* Active markets */}
-          <div className="space-y-2">
-            {shown.map((market) => (
-              <MarketRow
-                key={market.id}
-                market={market}
-                liveProbs={liveProbs[market.id]}
-              />
-            ))}
-          </div>
+          {/* Multi-outcome events */}
+          {filteredEvents.length > 0 && (
+            <>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex-1 h-px bg-border" />
+                <span className="font-mono text-[10px] text-muted font-bold tracking-widest">MULTI-OUTCOME EVENTS ({filteredEvents.length})</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="space-y-2 mb-6">
+                {filteredEvents.map((evt) => (
+                  <EventRow key={evt.id} event={evt} />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Binary markets */}
+          {active.length > 0 && (
+            <>
+              {filteredEvents.length > 0 && (
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="font-mono text-[10px] text-muted font-bold tracking-widest">BINARY MARKETS ({active.length})</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              )}
+              <div className="space-y-2">
+                {shown.map((market) => (
+                  <MarketRow
+                    key={market.id}
+                    market={market}
+                    liveProbs={liveProbs[market.id]}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
           {hasMore && (
             <button
@@ -192,7 +247,7 @@ export default function MarketsView({ markets }: MarketsViewProps) {
       )}
 
       <p className="mt-6 font-mono text-[10px] text-muted text-center">
-        {markets.length} markets synced from Polymarket
+        {markets.length} markets + {events.length} events synced from Polymarket
       </p>
     </div>
   );
