@@ -96,6 +96,25 @@ export default async function betRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: errors[closedReason] });
     }
 
+    // 3. Visibility check: only accept bets on markets visible to viewers
+    // Standalone markets (event_id IS NULL) must be active (resolved=false)
+    // Child markets (event_id IS NOT NULL) must belong to a non-resolved event
+    const { rows: [visibility] } = await app.db.query(
+      `SELECT m.resolved, m.event_id,
+              CASE WHEN m.event_id IS NOT NULL
+                   THEN (SELECT e.resolved FROM events e WHERE e.id = m.event_id)
+                   ELSE false
+              END AS event_resolved
+       FROM markets m WHERE m.id = $1`,
+      [market_id]
+    );
+    if (!visibility || visibility.resolved) {
+      return reply.status(409).send({ error: 'Market has resolved — betting is closed.' });
+    }
+    if (visibility.event_resolved) {
+      return reply.status(409).send({ error: 'This event has resolved — betting is closed.' });
+    }
+
     const client = await app.db.connect();
     try {
       await client.query('BEGIN');
