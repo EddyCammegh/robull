@@ -117,9 +117,13 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       }
       eventsSynced++;
     }
-    if (eventsSynced > 0) {
-      console.log(`[cron] Synced ${eventsSynced} events with ${childrenSynced} child markets.`);
-    }
+    console.log(`[cron] Synced ${eventsSynced} events with ${childrenSynced} child markets.`);
+
+    // Verify: count markets with/without event_id
+    const { rows: [eidCounts] } = await db.query(
+      `SELECT COUNT(event_id)::int AS with_eid, (COUNT(*) - COUNT(event_id))::int AS without_eid FROM markets`
+    );
+    console.log(`[cron] Markets: ${eidCounts.with_eid} with event_id, ${eidCounts.without_eid} standalone.`);
 
     // Reclassify ALL markets in DB using the latest classification rules
     const { rows } = await db.query('SELECT id, question, category FROM markets');

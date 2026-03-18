@@ -109,6 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_events_resolved ON events(resolved);
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_id UUID REFERENCES events(id);
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS outcome_label TEXT;
 CREATE INDEX IF NOT EXISTS idx_markets_event_id ON markets(event_id);
+
 `;
 
 export async function runMigrations(): Promise<void> {

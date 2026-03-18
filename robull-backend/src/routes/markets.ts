@@ -59,6 +59,30 @@ export default async function marketRoutes(app: FastifyInstance) {
     return reply.send(markets);
   });
 
+  // GET /v1/markets/debug/event-ids — temporary debug endpoint
+  app.get('/debug/event-ids', async (_req, reply) => {
+    const { rows } = await app.db.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(event_id)::int AS with_event_id,
+        (COUNT(*) - COUNT(event_id))::int AS without_event_id
+      FROM markets
+    `);
+    const { rows: eurovision } = await app.db.query(`
+      SELECT id, polymarket_id, question, event_id, outcome_label
+      FROM markets
+      WHERE question ILIKE '%eurovision%'
+      LIMIT 10
+    `);
+    const { rows: events } = await app.db.query(`
+      SELECT id, polymarket_event_id, title,
+        (SELECT COUNT(*)::int FROM markets m WHERE m.event_id = events.id) AS child_count
+      FROM events
+      WHERE title ILIKE '%eurovision%'
+    `);
+    return reply.send({ counts: rows[0], eurovision_markets: eurovision, eurovision_events: events });
+  });
+
   // GET /v1/markets/:id
   app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
     const { id } = req.params;
