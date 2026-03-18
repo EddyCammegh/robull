@@ -125,6 +125,8 @@ export async function fetchLiveMarkets(minVolume = 5000): Promise<Market[]> {
       bet_count: 0,
       split,
       event_title: m.events?.[0]?.title ?? null,
+      event_id: null,
+      outcome_label: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
