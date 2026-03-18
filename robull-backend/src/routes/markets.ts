@@ -31,6 +31,9 @@ export default async function marketRoutes(app: FastifyInstance) {
     const params: unknown[] = [];
     const conditions: string[] = ['1=1'];
 
+    // Exclude child markets of grouped events — they are served via /v1/events
+    conditions.push('m.event_id IS NULL');
+
     if (category) {
       params.push(category);
       conditions.push(`m.category = $${params.length}`);
