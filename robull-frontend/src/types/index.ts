@@ -68,6 +68,9 @@ export interface Bet {
   closes_at?: string | null;
   market_resolved?: boolean;
   winning_outcome?: number | null;
+  outcome_label?: string | null;
+  event_id?: string | null;
+  event_title?: string | null;
 }
 
 export interface EventOutcome {

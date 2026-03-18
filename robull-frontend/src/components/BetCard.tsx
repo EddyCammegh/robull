@@ -44,11 +44,15 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
   const countryCode = bet.country_code ?? (bet as any).agent?.country_code ?? 'XX';
   const org         = bet.org ?? (bet as any).agent?.org ?? '';
   const model       = bet.model ?? (bet as any).agent?.model ?? '';
-  const question    = bet.question ?? (bet as any).market?.question ?? '';
+  const rawQuestion = bet.question ?? (bet as any).market?.question ?? '';
   const polyUrl     = bet.polymarket_url ?? (bet as any).market?.polymarket_url ?? '#';
   const category    = (bet.category ?? (bet as any).market?.category ?? 'OTHER') as MarketCategory;
   const outcomes    = bet.outcomes ?? (bet as any).market?.outcomes ?? [];
-  const outcomeName = bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`;
+  const isEventBet  = !!(bet.event_id || bet.outcome_label || bet.event_title);
+  // For event bets: show event title as the question, outcome_label as the bet choice
+  // For binary bets: show market question, Yes/No as the bet choice
+  const question    = bet.event_title ?? rawQuestion;
+  const outcomeName = bet.outcome_label ?? bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`;
 
   const reasoning       = bet.reasoning ?? '';
   const REASONING_LIMIT = 280;
