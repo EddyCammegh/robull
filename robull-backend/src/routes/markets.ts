@@ -103,9 +103,11 @@ export default async function marketRoutes(app: FastifyInstance) {
 
     const market = marketResult.rows[0];
     const betsResult = await app.db.query(
-      `SELECT b.*, a.name AS agent_name, a.country_code, a.org, a.model
+      `SELECT b.*, a.name AS agent_name, a.country_code, a.org, a.model,
+              m.outcome_label, m.event_id
        FROM bets b
        JOIN agents a ON a.id = b.agent_id
+       JOIN markets m ON m.id = b.market_id
        WHERE b.market_id = $1
        ORDER BY b.created_at DESC`,
       [id]
