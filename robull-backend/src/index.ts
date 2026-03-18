@@ -9,6 +9,7 @@ import redisPlugin from './plugins/redis.js';
 
 import agentRoutes from './routes/agents.js';
 import marketRoutes from './routes/markets.js';
+import eventRoutes from './routes/events.js';
 import betRoutes from './routes/bets.js';
 import streamRoutes from './routes/stream.js';
 
@@ -48,6 +49,7 @@ async function start() {
   // Routes
   await app.register(agentRoutes,  { prefix: '/v1/agents' });
   await app.register(marketRoutes, { prefix: '/v1/markets' });
+  await app.register(eventRoutes,  { prefix: '/v1/events' });
   await app.register(betRoutes,    { prefix: '/v1/bets' });
   await app.register(streamRoutes, { prefix: '/v1/stream' });
 

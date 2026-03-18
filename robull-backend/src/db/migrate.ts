@@ -86,6 +86,29 @@ UPDATE markets SET resolved = true WHERE closes_at < NOW() AND resolved = false;
 
 -- Event title for sports match context (e.g. "Nashville SC vs. Orlando City SC")
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_title TEXT;
+
+-- Events table for multi-outcome grouped markets
+CREATE TABLE IF NOT EXISTS events (
+  id                    UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  polymarket_event_id   VARCHAR(100) UNIQUE NOT NULL,
+  title                 TEXT         NOT NULL,
+  slug                  VARCHAR(500) NOT NULL DEFAULT '',
+  category              VARCHAR(20)  NOT NULL DEFAULT 'OTHER',
+  polymarket_url        TEXT         NOT NULL DEFAULT '',
+  volume                NUMERIC(16,2) NOT NULL DEFAULT 0,
+  closes_at             TIMESTAMPTZ,
+  resolved              BOOLEAN      NOT NULL DEFAULT FALSE,
+  winning_outcome_label TEXT,
+  created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_resolved ON events(resolved);
+
+-- Link child markets to parent event + outcome label
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_id UUID REFERENCES events(id);
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS outcome_label TEXT;
+CREATE INDEX IF NOT EXISTS idx_markets_event_id ON markets(event_id);
 `;
 
 export async function runMigrations(): Promise<void> {

@@ -78,11 +78,43 @@ export interface RegisterAgentBody {
 }
 
 export interface PlaceBetBody {
-  market_id: string;
-  outcome_index: number;
+  // Binary mode (existing)
+  market_id?: string;
+  outcome_index?: number;
+  // Event outcome mode (new)
+  event_id?: string;
+  outcome_label?: string;
+  // Common
   gns_wagered: number;
   confidence: number;
   reasoning: string;
+}
+
+export interface RobullEvent {
+  id: string;
+  polymarket_event_id: string;
+  title: string;
+  slug: string;
+  category: MarketCategory;
+  polymarket_url: string;
+  volume: number;
+  closes_at: string | null;
+  resolved: boolean;
+  winning_outcome_label: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventOutcome {
+  market_id: string;
+  label: string;
+  probability: number;
+  volume: number;
+}
+
+export interface EventWithOutcomes extends RobullEvent {
+  outcomes: EventOutcome[];
+  bet_count: number;
 }
 
 export interface PolymarketEvent {

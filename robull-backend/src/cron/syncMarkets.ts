@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
-import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchRecentlySettledMarkets, fetchMarketStatus } from '../services/polymarket.js';
+import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchRecentlySettledMarkets, fetchMarketStatus, fetchPolymarketEvents } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
@@ -66,6 +66,59 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     }
 
     console.log(`[cron] Synced ${synced} markets from API (${inserted} new, ${synced - inserted} updated).`);
+
+    // ── Sync multi-outcome events ─────────────────────────────────────────
+    const events = await fetchPolymarketEvents();
+    let eventsSynced = 0;
+    let childrenSynced = 0;
+    for (const evt of events) {
+      // Upsert event row
+      const { rows: [evtRow] } = await db.query(
+        `INSERT INTO events
+           (polymarket_event_id, title, slug, category, polymarket_url, volume, closes_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (polymarket_event_id) DO UPDATE SET
+           title          = EXCLUDED.title,
+           volume         = EXCLUDED.volume,
+           category       = EXCLUDED.category,
+           closes_at      = EXCLUDED.closes_at,
+           updated_at     = NOW()
+         RETURNING id`,
+        [evt.polymarket_event_id, evt.title, evt.slug, evt.category, evt.polymarket_url, evt.volume, evt.closes_at]
+      );
+      const eventId = evtRow.id;
+
+      // Upsert child markets linked to this event
+      for (const child of evt.child_markets) {
+        fetchedIds.add(child.polymarket_id);
+        await db.query(
+          `INSERT INTO markets
+             (polymarket_id, question, category, slug, polymarket_url, volume,
+              b_parameter, outcomes, quantities, initial_probs, closes_at, resolved,
+              event_id, outcome_label)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, true, $12, $13)
+           ON CONFLICT (polymarket_id) DO UPDATE SET
+             volume         = EXCLUDED.volume,
+             category       = EXCLUDED.category,
+             closes_at      = EXCLUDED.closes_at,
+             event_id       = EXCLUDED.event_id,
+             outcome_label  = EXCLUDED.outcome_label,
+             updated_at     = NOW()
+           `,
+          [
+            child.polymarket_id, child.question, evt.category, evt.slug,
+            evt.polymarket_url, child.volume, child.b_parameter,
+            child.outcomes, child.quantities, child.initial_probs,
+            child.closes_at, eventId, child.outcome_label,
+          ]
+        );
+        childrenSynced++;
+      }
+      eventsSynced++;
+    }
+    if (eventsSynced > 0) {
+      console.log(`[cron] Synced ${eventsSynced} events with ${childrenSynced} child markets.`);
+    }
 
     // Reclassify ALL markets in DB using the latest classification rules
     const { rows } = await db.query('SELECT id, question, category FROM markets');
@@ -165,11 +218,16 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       console.log(`[cron] Backfill total: ${totalFilled} winning outcomes set.`);
     }
 
-    // ── Backfill / trim: maintain exactly 150 active markets ─────────────
+    // ── Backfill / trim: maintain exactly 150 active slots ───────────────
+    // Events count as 1 slot regardless of child markets. Standalone markets = 1 slot.
     const TARGET_ACTIVE = 150;
-    const { rows: [{ count: activeCount }] } = await db.query(
-      `SELECT COUNT(*)::int AS count FROM markets WHERE resolved = false`
+    const { rows: [{ standalone }] } = await db.query(
+      `SELECT COUNT(*)::int AS standalone FROM markets WHERE resolved = false AND event_id IS NULL`
     );
+    const { rows: [{ event_count }] } = await db.query(
+      `SELECT COUNT(DISTINCT event_id)::int AS event_count FROM markets WHERE resolved = false AND event_id IS NOT NULL`
+    );
+    const activeCount = (standalone as number) + (event_count as number);
 
     if (activeCount < TARGET_ACTIVE) {
       const slots = TARGET_ACTIVE - activeCount;

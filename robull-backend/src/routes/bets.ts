@@ -16,18 +16,20 @@ async function authenticate(app: FastifyInstance, apiKey: string): Promise<strin
 
 export default async function betRoutes(app: FastifyInstance) {
 
-  // POST /v1/bets - place a bet
+  // POST /v1/bets - place a bet (binary or event outcome mode)
   app.post<{ Body: PlaceBetBody }>('/', {
     schema: {
       body: {
         type: 'object',
-        required: ['market_id', 'outcome_index', 'gns_wagered', 'confidence', 'reasoning'],
+        required: ['gns_wagered', 'confidence', 'reasoning'],
         properties: {
-          market_id:     { type: 'string', format: 'uuid' },
-          outcome_index: { type: 'integer', minimum: 0 },
-          gns_wagered:   { type: 'number', minimum: 100, maximum: 5000 },
-          confidence:    { type: 'integer', minimum: 0, maximum: 100 },
-          reasoning:     { type: 'string', minLength: 10, maxLength: 10000 },
+          market_id:      { type: 'string', format: 'uuid' },
+          outcome_index:  { type: 'integer', minimum: 0 },
+          event_id:       { type: 'string', format: 'uuid' },
+          outcome_label:  { type: 'string' },
+          gns_wagered:    { type: 'number', minimum: 100, maximum: 5000 },
+          confidence:     { type: 'integer', minimum: 0, maximum: 100 },
+          reasoning:      { type: 'string', minLength: 10, maxLength: 10000 },
         },
       },
     },
@@ -43,7 +45,37 @@ export default async function betRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid API key' });
     }
 
-    const { market_id, outcome_index, gns_wagered, confidence, reasoning } = req.body;
+    const { gns_wagered, confidence, reasoning } = req.body;
+
+    // ── Resolve bet mode: binary (market_id + outcome_index) or event (event_id + outcome_label)
+    let market_id: string;
+    let outcome_index: number;
+    let eventOutcomeLabel: string | undefined;
+
+    if (req.body.market_id && req.body.outcome_index !== undefined) {
+      // Binary mode — existing behaviour
+      market_id = req.body.market_id;
+      outcome_index = req.body.outcome_index;
+    } else if (req.body.event_id && req.body.outcome_label) {
+      // Event outcome mode — find matching child market
+      const { rows: childMarkets } = await app.db.query(
+        `SELECT m.id, m.outcome_label FROM markets m
+         WHERE m.event_id = $1 AND m.resolved = false AND LOWER(m.outcome_label) = LOWER($2)`,
+        [req.body.event_id, req.body.outcome_label]
+      );
+      if (childMarkets.length === 0) {
+        return reply.status(400).send({
+          error: `No outcome matching "${req.body.outcome_label}" found for this event. Use GET /v1/events/${req.body.event_id} to see available outcomes.`,
+        });
+      }
+      market_id = childMarkets[0].id;
+      outcome_index = 0; // Always bet Yes on the matching child market
+      eventOutcomeLabel = childMarkets[0].outcome_label;
+    } else {
+      return reply.status(400).send({
+        error: 'Provide either (market_id + outcome_index) for binary bets, or (event_id + outcome_label) for event outcome bets.',
+      });
+    }
 
     // ── Market integrity checks (Redis, sub-ms) ──────────────────────────
     // 1. Circuit breaker: reject all bets if Polymarket API has been down 5+ min
@@ -134,7 +166,7 @@ export default async function betRoutes(app: FastifyInstance) {
         confidence,
         reasoning,
         created_at: betResult.rows[0].created_at,
-        outcome_name: market.outcomes[outcome_index],
+        outcome_name: eventOutcomeLabel ?? market.outcomes[outcome_index],
         agent: {
           name: agent.name,
           country_code: agent.country_code,
@@ -193,7 +225,7 @@ export default async function betRoutes(app: FastifyInstance) {
          b.*,
          a.name AS agent_name, a.country_code, a.org, a.model,
          m.question, m.polymarket_url, m.category, m.outcomes, m.closes_at,
-         m.resolved AS market_resolved, m.winning_outcome
+         m.resolved AS market_resolved, m.winning_outcome, m.outcome_label
        FROM bets b
        JOIN agents a ON a.id = b.agent_id
        JOIN markets m ON m.id = b.market_id

@@ -25,6 +25,19 @@ interface GammaMarket {
   tags?: { label: string }[];
   conditionId?: string;
   events?: GammaEvent[];
+  groupItemTitle?: string;
+}
+
+// ─── Full event from /events endpoint ─────────────────────────────────────────
+interface GammaEventFull {
+  id: string;
+  title: string;
+  slug: string;
+  volume: string;
+  endDate: string;
+  active: boolean;
+  closed: boolean;
+  markets: GammaMarket[];
 }
 
 export interface NormalisedMarket {
@@ -439,6 +452,108 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
   });
 
   return results;
+}
+
+// ─── Multi-outcome event fetching ────────────────────────────────────────────
+
+export interface NormalisedChildMarket {
+  polymarket_id: string;
+  question: string;
+  outcome_label: string; // groupItemTitle
+  volume: number;
+  b_parameter: number;
+  outcomes: string[];
+  quantities: number[];
+  initial_probs: number[];
+  closes_at: string | null;
+}
+
+export interface NormalisedEvent {
+  polymarket_event_id: string;
+  title: string;
+  slug: string;
+  category: MarketCategory;
+  polymarket_url: string;
+  volume: number;
+  closes_at: string | null;
+  child_markets: NormalisedChildMarket[];
+}
+
+export async function fetchPolymarketEvents(): Promise<NormalisedEvent[]> {
+  const events: NormalisedEvent[] = [];
+  const PAGE_SIZE = 20;
+  const MAX_EVENTS = 200;
+
+  for (let offset = 0; offset < MAX_EVENTS; offset += PAGE_SIZE) {
+    const url = `${GAMMA_API}/events?active=true&closed=false&limit=${PAGE_SIZE}&offset=${offset}&order=volume&ascending=false`;
+    const res = await fetch(url);
+    if (!res.ok) break;
+    const page = await res.json() as GammaEventFull[];
+    if (page.length === 0) break;
+
+    for (const evt of page) {
+      const childMarkets = evt.markets ?? [];
+      // Only process multi-market events (2+ child markets)
+      if (childMarkets.length < 2) continue;
+
+      const evtVolume = parseFloat(evt.volume ?? '0');
+      const category = classifyCategory(evt.title);
+
+      // Volume filter at event level
+      const minVol = (category === 'CRYPTO' || category === 'MACRO') ? MIN_VOLUME_CRYPTO_MACRO : MIN_VOLUME;
+      if (evtVolume < minVol) continue;
+
+      // Quality filter on event title
+      if (isLowQualityMarket(evt.title, [])) continue;
+
+      const children: NormalisedChildMarket[] = [];
+      for (const m of childMarkets) {
+        if (!m.active || m.closed) continue;
+        const label = m.groupItemTitle ?? m.question;
+        const vol = parseFloat(m.volume ?? '0');
+
+        let probs: number[];
+        try {
+          const prices = JSON.parse(m.outcomePrices).map(Number);
+          const total = prices.reduce((a: number, v: number) => a + v, 0);
+          probs = prices.map((p: number) => p / total);
+        } catch { continue; }
+
+        const b = computeB(vol > 0 ? vol : evtVolume / childMarkets.length);
+        const quantities = bootstrapQuantities(probs, b);
+
+        children.push({
+          polymarket_id: m.id,
+          question: m.question,
+          outcome_label: label,
+          volume: vol,
+          b_parameter: b,
+          outcomes: ['Yes', 'No'],
+          quantities,
+          initial_probs: probs,
+          closes_at: m.endDate ?? evt.endDate ?? null,
+        });
+      }
+
+      if (children.length < 2) continue;
+
+      events.push({
+        polymarket_event_id: evt.id,
+        title: evt.title,
+        slug: evt.slug,
+        category,
+        polymarket_url: `https://polymarket.com/event/${evt.slug}`,
+        volume: evtVolume,
+        closes_at: evt.endDate ?? null,
+        child_markets: children,
+      });
+    }
+
+    if (page.length < PAGE_SIZE) break;
+  }
+
+  console.log(`[polymarket] Fetched ${events.length} multi-outcome events with ${events.reduce((s, e) => s + e.child_markets.length, 0)} child markets.`);
+  return events;
 }
 
 // ─── Lightweight per-market status check for integrity sync ────────────────────
