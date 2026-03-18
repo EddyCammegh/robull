@@ -108,25 +108,33 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
 
     // ── Backfill winning outcomes for resolved markets missing them ────────
     const { rows: missingOutcome } = await db.query(
-      `SELECT id, polymarket_id FROM markets
+      `SELECT id, polymarket_id, question FROM markets
        WHERE resolved = true AND winning_outcome IS NULL
        ORDER BY updated_at DESC LIMIT 20`
     );
+    console.log(`[cron] Backfill check: ${missingOutcome.length} resolved markets missing winning_outcome.`);
     if (missingOutcome.length > 0) {
       let filled = 0;
+      let notResolved = 0;
       for (const m of missingOutcome) {
         const status = await fetchMarketStatus(m.polymarket_id);
-        if (status?.winningOutcome != null) {
+        if (status === null) {
+          console.log(`[backfill] API returned null for ${m.polymarket_id} ("${m.question?.slice(0, 50)}")`);
+          continue;
+        }
+        if (status.winningOutcome != null) {
           await db.query(
             'UPDATE markets SET winning_outcome = $2, updated_at = NOW() WHERE id = $1',
             [m.id, status.winningOutcome]
           );
+          console.log(`[backfill] Set winning_outcome=${status.winningOutcome} for "${m.question?.slice(0, 60)}"`);
           filled++;
+        } else {
+          notResolved++;
+          console.log(`[backfill] No winner yet: closed=${status.closed} active=${status.active} for "${m.question?.slice(0, 50)}"`);
         }
       }
-      if (filled > 0) {
-        console.log(`[cron] Backfilled winning_outcome for ${filled} resolved markets.`);
-      }
+      console.log(`[cron] Backfill result: ${filled} filled, ${notResolved} not yet resolved, ${missingOutcome.length - filled - notResolved} API errors.`);
     }
 
     // ── Backfill / trim: maintain exactly 150 active markets ─────────────

@@ -57,6 +57,9 @@ export async function syncTier(db: Pool, redis: Redis, tier: Tier): Promise<void
       apiOk = true; // at least one API call succeeded
 
       if (!status.active || status.closed) {
+        if (status.winningOutcome != null) {
+          console.log(`[integrity:${tier}] Closing market ${market.polymarket_id} with winning_outcome=${status.winningOutcome}`);
+        }
         await closeMarketEverywhere(redis, db, market.id, status.winningOutcome);
         closed++;
       } else {
