@@ -481,8 +481,8 @@ export interface NormalisedEvent {
 
 export async function fetchPolymarketEvents(): Promise<NormalisedEvent[]> {
   const events: NormalisedEvent[] = [];
-  const PAGE_SIZE = 20;
-  const MAX_EVENTS = 200;
+  const PAGE_SIZE = 100;
+  const MAX_EVENTS = 500;
 
   for (let offset = 0; offset < MAX_EVENTS; offset += PAGE_SIZE) {
     const url = `${GAMMA_API}/events?active=true&closed=false&limit=${PAGE_SIZE}&offset=${offset}&order=volume&ascending=false`;

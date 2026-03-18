@@ -96,13 +96,14 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
              (polymarket_id, question, category, slug, polymarket_url, volume,
               b_parameter, outcomes, quantities, initial_probs, closes_at, resolved,
               event_id, outcome_label)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, true, $12, $13)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, false, $12, $13)
            ON CONFLICT (polymarket_id) DO UPDATE SET
              volume         = EXCLUDED.volume,
              category       = EXCLUDED.category,
              closes_at      = EXCLUDED.closes_at,
              event_id       = EXCLUDED.event_id,
              outcome_label  = EXCLUDED.outcome_label,
+             resolved       = false,
              updated_at     = NOW()
            `,
           [
@@ -235,7 +236,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       // on Polymarket), ordered by volume so highest-signal markets fill first.
       const { rows: candidates } = await db.query(
         `SELECT id, polymarket_id FROM markets
-         WHERE resolved = true
+         WHERE resolved = true AND event_id IS NULL
          ORDER BY volume DESC`
       );
       let activated = 0;
@@ -257,13 +258,13 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         `UPDATE markets SET resolved = true, updated_at = NOW()
          WHERE id IN (
            SELECT id FROM markets
-           WHERE resolved = false
+           WHERE resolved = false AND event_id IS NULL
            ORDER BY volume ASC
            LIMIT $1
          )`,
         [excess]
       );
-      console.log(`[cron] Trimmed ${excess} lowest-volume markets (${activeCount} → ${TARGET_ACTIVE}).`);
+      console.log(`[cron] Trimmed ${excess} lowest-volume standalone markets (${activeCount} → ${TARGET_ACTIVE}).`);
     }
 
     await logCategoryCounts(db, 'After sync');
