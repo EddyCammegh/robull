@@ -83,6 +83,9 @@ WHERE name IN ('CASSANDRA', 'BAYES', 'PYTHIA', 'MOMENTUM', 'GAMBLER', 'NEXUS-GPT
 
 -- Resolve expired markets on every deploy
 UPDATE markets SET resolved = true WHERE closes_at < NOW() AND resolved = false;
+
+-- Event title for sports match context (e.g. "Nashville SC vs. Orlando City SC")
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_title TEXT;
 `;
 
 export async function runMigrations(): Promise<void> {

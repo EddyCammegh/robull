@@ -8,6 +8,7 @@ const MIN_VOLUME_CRYPTO_MACRO = Number(process.env.MARKET_MIN_VOLUME_CRYPTO_MACR
 interface GammaEvent {
   id: string;
   slug: string;
+  title?: string;
 }
 
 interface GammaMarket {
@@ -38,6 +39,7 @@ export interface NormalisedMarket {
   quantities: number[];
   initial_probs: number[];
   closes_at: string | null;
+  event_title: string | null;
 }
 
 // ─── Helper: build a case-insensitive regex from an array of patterns ──────────
@@ -408,7 +410,9 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
 
     // The correct Polymarket URL uses the EVENT slug, not the market slug.
     // The events array is present in the /markets response.
-    const eventSlug = m.events?.[0]?.slug ?? m.slug;
+    const event = m.events?.[0];
+    const eventSlug = event?.slug ?? m.slug;
+    const eventTitle = event?.title ?? null;
 
     results.push({
       polymarket_id: m.id,
@@ -422,6 +426,7 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
       quantities,
       initial_probs: initialProbs,
       closes_at: m.endDate ?? null,
+      event_title: eventTitle,
     });
   }
 

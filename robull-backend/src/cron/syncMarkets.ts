@@ -33,14 +33,15 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const { rows: upserted } = await db.query(
         `INSERT INTO markets
            (polymarket_id, question, category, slug, polymarket_url, volume,
-            b_parameter, outcomes, quantities, initial_probs, closes_at, resolved)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, true)
+            b_parameter, outcomes, quantities, initial_probs, closes_at, resolved, event_title)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, true, $12)
          ON CONFLICT (polymarket_id) DO UPDATE SET
            volume         = EXCLUDED.volume,
            category       = EXCLUDED.category,
            slug           = EXCLUDED.slug,
            polymarket_url = EXCLUDED.polymarket_url,
            closes_at      = EXCLUDED.closes_at,
+           event_title    = COALESCE(EXCLUDED.event_title, markets.event_title),
            updated_at     = NOW()
          -- Do NOT overwrite quantities or resolved — managed by backfill
          RETURNING (xmax = 0) AS is_new
@@ -57,6 +58,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
           m.quantities,
           m.initial_probs,
           m.closes_at,
+          m.event_title,
         ]
       );
       synced++;

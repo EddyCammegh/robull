@@ -35,6 +35,7 @@ export interface Market {
   winning_outcome: number | null;
   bet_count: number;
   split: boolean;
+  event_title: string | null;
   created_at: string;
   updated_at: string;
 }

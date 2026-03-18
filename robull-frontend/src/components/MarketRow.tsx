@@ -161,12 +161,16 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
             </span>
             <span
               onClick={(e) => { e.stopPropagation(); openMarket(market.id, market); }}
-              className={clsx(
-                'font-body text-sm font-medium truncate hover:text-accent transition-colors cursor-pointer',
-                market.resolved ? 'text-muted' : 'text-white'
-              )}
+              className="min-w-0 truncate hover:text-accent transition-colors cursor-pointer"
             >
-              {market.question}
+              {market.event_title && market.event_title !== market.question && (
+                <span className={clsx('font-mono text-[10px] mr-1.5', market.resolved ? 'text-muted/70' : 'text-muted')}>
+                  {market.event_title} ·
+                </span>
+              )}
+              <span className={clsx('font-body text-sm font-medium', market.resolved ? 'text-muted' : 'text-white')}>
+                {market.question}
+              </span>
             </span>
           </div>
 
