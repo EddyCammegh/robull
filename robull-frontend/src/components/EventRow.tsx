@@ -4,7 +4,7 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import CountdownTimer from './CountdownTimer';
 import PolymarketButton from './PolymarketButton';
-import type { RobullEvent, MarketCategory } from '@/types';
+import type { RobullEvent, EventOutcome, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
   MACRO:         'cat-MACRO',
@@ -28,8 +28,15 @@ export default function EventRow({ event }: { event: RobullEvent }) {
   const shown = showAll ? sorted : sorted.slice(0, INITIAL_VISIBLE);
   const hiddenCount = sorted.length - INITIAL_VISIBLE;
 
-  // Find the highest probability for the bar width scale
+  // Detect event type: mutually exclusive (sum ~100%) vs independent thresholds (sum >110%)
+  const probSum = event.outcomes.reduce((s, o) => s + o.probability, 0);
+  const isIndependent = probSum > 1.1;
+
+  // For mutually exclusive: scale bars relative to leader
+  // For independent: scale bars to 100% = 100% probability (absolute)
   const maxProb = sorted.length > 0 ? sorted[0].probability : 1;
+
+  const typeBadge = isIndependent ? 'INDEPENDENT' : 'PICK ONE';
 
   return (
     <div className="card overflow-hidden">
@@ -72,29 +79,33 @@ export default function EventRow({ event }: { event: RobullEvent }) {
 
       {open && (
         <div className="border-t border-border px-4 pb-4 pt-3 animate-slideUp">
+          {/* Type indicator */}
+          <div className="mb-3 flex items-center gap-2">
+            <span className={clsx(
+              'rounded px-1.5 py-0.5 font-mono text-[9px] font-bold border',
+              isIndependent
+                ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                : 'bg-green-500/10 border-green-500/30 text-green-400'
+            )}>
+              {typeBadge}
+            </span>
+            <span className="font-mono text-[10px] text-muted">
+              {isIndependent
+                ? 'Each outcome resolves independently — multiple can be true'
+                : 'Only one outcome wins'}
+            </span>
+          </div>
+
           {/* Outcome probability bars */}
           <div className="space-y-1.5 mb-4">
             {shown.map((outcome, i) => (
-              <div key={outcome.market_id} className="flex items-center gap-3">
-                <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
-                  {(outcome.probability * 100).toFixed(1)}%
-                </span>
-                <div className="flex-1 h-4 rounded bg-subtle overflow-hidden relative">
-                  <div
-                    className="h-full rounded transition-all duration-500"
-                    style={{
-                      width: maxProb > 0 ? `${(outcome.probability / maxProb) * 100}%` : '0%',
-                      background: i === 0 ? '#ff4400' : i === 1 ? '#cc3600' : '#555555',
-                    }}
-                  />
-                  <span className="absolute inset-0 flex items-center px-2 font-mono text-[10px] text-white font-medium truncate">
-                    {outcome.label}
-                  </span>
-                </div>
-                <span className="font-mono text-[10px] text-muted flex-shrink-0 w-14 text-right hidden sm:block">
-                  ${(outcome.volume / 1000).toFixed(0)}K
-                </span>
-              </div>
+              <OutcomeBar
+                key={outcome.market_id}
+                outcome={outcome}
+                index={i}
+                isIndependent={isIndependent}
+                maxProb={maxProb}
+              />
             ))}
           </div>
 
@@ -120,6 +131,40 @@ export default function EventRow({ event }: { event: RobullEvent }) {
           <PolymarketButton url={event.polymarket_url} question={event.title} />
         </div>
       )}
+    </div>
+  );
+}
+
+function OutcomeBar({ outcome, index, isIndependent, maxProb }: {
+  outcome: EventOutcome; index: number; isIndependent: boolean; maxProb: number;
+}) {
+  // Independent: absolute width (probability = % of bar filled)
+  // Mutually exclusive: relative to leader
+  const barWidth = isIndependent
+    ? `${outcome.probability * 100}%`
+    : maxProb > 0 ? `${(outcome.probability / maxProb) * 100}%` : '0%';
+
+  const barColor = isIndependent
+    ? '#60a5fa' // blue for independent thresholds
+    : index === 0 ? '#ff4400' : index === 1 ? '#cc3600' : '#555555';
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
+        {(outcome.probability * 100).toFixed(1)}%
+      </span>
+      <div className="flex-1 h-4 rounded bg-subtle overflow-hidden relative">
+        <div
+          className="h-full rounded transition-all duration-500"
+          style={{ width: barWidth, background: barColor }}
+        />
+        <span className="absolute inset-0 flex items-center px-2 font-mono text-[10px] text-white font-medium truncate">
+          {outcome.label}
+        </span>
+      </div>
+      <span className="font-mono text-[10px] text-muted flex-shrink-0 w-14 text-right hidden sm:block">
+        ${(outcome.volume / 1000).toFixed(0)}K
+      </span>
     </div>
   );
 }
