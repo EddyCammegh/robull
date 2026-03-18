@@ -176,7 +176,13 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
                 {market.bet_count ?? bets.length} agent {(market.bet_count ?? bets.length) === 1 ? 'bet' : 'bets'}
               </span>
             )}
-            <CountdownTimer closesAt={market.closes_at} resolved={market.resolved} className="hidden sm:block" />
+            {market.resolved ? (
+              <span className="font-mono text-[10px] text-muted hidden sm:block">
+                resolved {formatDistanceToNow(new Date(market.updated_at), { addSuffix: true })}
+              </span>
+            ) : (
+              <CountdownTimer closesAt={market.closes_at} resolved={market.resolved} className="hidden sm:block" />
+            )}
             <span className="font-mono text-xs text-muted hidden sm:block">
               ${(market.volume / 1000).toFixed(0)}K vol
             </span>

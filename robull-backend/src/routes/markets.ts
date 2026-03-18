@@ -36,9 +36,9 @@ export default async function marketRoutes(app: FastifyInstance) {
       conditions.push(`m.category = $${params.length}`);
     }
 
-    // include_recent=12h: fetch active markets + recently resolved (last 12h)
+    // include_recent=12h: active markets + recently settled (winning_outcome set, last 12h)
     if (include_recent === '12h') {
-      conditions.push(`(m.resolved = false OR (m.resolved = true AND m.updated_at >= NOW() - INTERVAL '12 hours'))`);
+      conditions.push(`(m.resolved = false OR (m.resolved = true AND m.winning_outcome IS NOT NULL AND m.updated_at >= NOW() - INTERVAL '12 hours'))`);
     } else {
       conditions.push(`m.resolved = ${resolved === 'true' ? 'true' : 'false'}`);
     }

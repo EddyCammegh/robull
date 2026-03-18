@@ -79,9 +79,10 @@ export default function MarketsView({ markets }: MarketsViewProps) {
       return true;
     });
     const act = sortMarkets(base.filter(m => !m.resolved), sortKey);
-    const res = base.filter(m => m.resolved).sort((a, b) =>
-      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+    const res = base
+      .filter(m => m.resolved && m.winning_outcome != null)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 20);
     return { active: act, resolved: res };
   }, [markets, category, search, sortKey]);
 
@@ -172,11 +173,11 @@ export default function MarketsView({ markets }: MarketsViewProps) {
           {resolved.length > 0 && (
             <>
               <div className="mt-8 mb-4 flex items-center gap-3">
-                <div className="flex-1 h-px bg-border" />
-                <span className="font-mono text-xs text-muted font-bold tracking-widest">RECENTLY RESOLVED</span>
-                <div className="flex-1 h-px bg-border" />
+                <div className="flex-1 h-px bg-accent/30" />
+                <span className="font-mono text-xs text-accent font-bold tracking-widest">RECENTLY RESOLVED</span>
+                <div className="flex-1 h-px bg-accent/30" />
               </div>
-              <div className="space-y-2 opacity-75">
+              <div className="space-y-2 opacity-70">
                 {resolved.map((market) => (
                   <MarketRow
                     key={market.id}
