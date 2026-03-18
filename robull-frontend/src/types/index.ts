@@ -78,6 +78,8 @@ export interface EventOutcome {
   label: string;
   probability: number;
   volume: number;
+  closes_at?: string | null;
+  resolved?: boolean;
 }
 
 export interface RobullEvent {

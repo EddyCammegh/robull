@@ -24,8 +24,15 @@ export default function EventRow({ event }: { event: RobullEvent }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const category = event.category as MarketCategory;
 
-  // Sort outcomes by probability descending
-  const sorted = [...event.outcomes].sort((a, b) => b.probability - a.probability);
+  // Sort: active outcomes first (by probability desc), then expired at the bottom
+  const now = Date.now();
+  const isExpired = (o: EventOutcome) => o.resolved || (o.closes_at && new Date(o.closes_at).getTime() < now);
+  const sorted = [...event.outcomes].sort((a, b) => {
+    const aExp = isExpired(a) ? 1 : 0;
+    const bExp = isExpired(b) ? 1 : 0;
+    if (aExp !== bExp) return aExp - bExp;
+    return b.probability - a.probability;
+  });
   const shown = sorted.slice(0, visibleCount);
   const hiddenCount = sorted.length - visibleCount;
 
@@ -139,32 +146,37 @@ export default function EventRow({ event }: { event: RobullEvent }) {
 function OutcomeBar({ outcome, index, isIndependent, maxProb }: {
   outcome: EventOutcome; index: number; isIndependent: boolean; maxProb: number;
 }) {
-  // Independent: absolute width (probability = % of bar filled)
-  // Mutually exclusive: relative to leader
+  const expired = outcome.resolved || (outcome.closes_at && new Date(outcome.closes_at).getTime() < Date.now());
+
   const barWidth = isIndependent
     ? `${outcome.probability * 100}%`
     : maxProb > 0 ? `${(outcome.probability / maxProb) * 100}%` : '0%';
 
-  const barColor = isIndependent
-    ? '#60a5fa' // blue for independent thresholds
+  const barColor = expired
+    ? '#222222'
+    : isIndependent
+    ? '#60a5fa'
     : index === 0 ? '#ff4400' : index === 1 ? '#cc3600' : '#555555';
 
   return (
-    <div className="flex items-center gap-3">
+    <div className={clsx('flex items-center gap-3', expired && 'opacity-40')}>
       <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
-        {(outcome.probability * 100).toFixed(1)}%
+        {expired ? '—' : `${(outcome.probability * 100).toFixed(1)}%`}
       </span>
       <div className="flex-1 h-4 rounded bg-subtle overflow-hidden relative">
         <div
           className="h-full rounded transition-all duration-500"
-          style={{ width: barWidth, background: barColor }}
+          style={{ width: expired ? '0%' : barWidth, background: barColor }}
         />
-        <span className="absolute inset-0 flex items-center px-2 font-mono text-[10px] text-white font-medium truncate">
-          {outcome.label}
+        <span className={clsx(
+          'absolute inset-0 flex items-center px-2 font-mono text-[10px] font-medium truncate',
+          expired ? 'text-muted' : 'text-white'
+        )}>
+          {outcome.label} {expired && '· PASSED'}
         </span>
       </div>
       <span className="font-mono text-[10px] text-muted flex-shrink-0 w-14 text-right hidden sm:block">
-        ${(outcome.volume / 1000).toFixed(0)}K
+        {expired ? '' : `$${(outcome.volume / 1000).toFixed(0)}K`}
       </span>
     </div>
   );

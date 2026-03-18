@@ -131,8 +131,8 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                     />
                   </div>
                   <span className={clsx(
-                    'font-mono text-xs w-20 font-semibold',
-                    isResolved && i === market.winning_outcome ? 'text-green-400 font-bold' : 'text-white'
+                    'font-mono text-sm font-bold w-24',
+                    isResolved && i === market.winning_outcome ? 'text-green-400' : 'text-white'
                   )}>
                     {outcome} {isResolved && i === market.winning_outcome && '✓'}
                   </span>

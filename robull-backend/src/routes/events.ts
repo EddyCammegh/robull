@@ -32,10 +32,11 @@ export default async function eventRoutes(app: FastifyInstance) {
     const result = await Promise.all(events.map(async (evt) => {
       const { rows: children } = await app.db.query(
         `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter,
+                m.closes_at, m.resolved AS child_resolved,
                 COUNT(b.id)::int AS bet_count
          FROM markets m
          LEFT JOIN bets b ON b.market_id = m.id
-         WHERE m.event_id = $1 AND m.resolved = false
+         WHERE m.event_id = $1
          GROUP BY m.id
          ORDER BY m.volume DESC`,
         [evt.id]
@@ -49,8 +50,10 @@ export default async function eventRoutes(app: FastifyInstance) {
         return {
           market_id: child.id,
           label: child.outcome_label,
-          probability: probs[0], // Yes probability = probability of this outcome
+          probability: probs[0],
           volume: Number(child.volume),
+          closes_at: child.closes_at,
+          resolved: child.child_resolved,
         };
       });
 
