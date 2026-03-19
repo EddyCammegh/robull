@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import type Redis from 'ioredis';
 import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchRecentlySettledMarkets, fetchMarketStatus, fetchPolymarketEvents } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
+import { bootstrapEventQuantities } from '../services/lmsr.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
   const { rows } = await db.query(
@@ -115,6 +116,26 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         );
         childrenSynced++;
       }
+
+      // Initialize event-level LMSR quantities if not yet set
+      const { rows: [evtState] } = await db.query(
+        'SELECT quantities, active_agent_count FROM events WHERE id = $1',
+        [eventId]
+      );
+      if (!evtState.quantities || evtState.quantities.length === 0) {
+        // Build probability vector from child markets' Yes prices
+        const BASE_B = 200;
+        const childProbs = evt.child_markets.map((child) => {
+          const yesProb = child.initial_probs[0] ?? 0;
+          return Math.max(yesProb, 0.001); // floor at 0.001 to avoid -Infinity
+        });
+        const eventQuantities = bootstrapEventQuantities(childProbs, BASE_B);
+        await db.query(
+          `UPDATE events SET quantities = $1, base_b = $2, lmsr_b = $2, active_agent_count = 0 WHERE id = $3`,
+          [eventQuantities, BASE_B, eventId]
+        );
+      }
+
       eventsSynced++;
     }
     console.log(`[cron] Synced ${eventsSynced} events with ${childrenSynced} child markets.`);

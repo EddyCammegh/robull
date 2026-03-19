@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { createHash } from 'crypto';
-import { lmsrBuy, lmsrProbs } from '../services/lmsr.js';
-import { broadcastBet, broadcastMarketUpdate } from '../services/sse.js';
+import { lmsrBuy, lmsrProbs, computeDynamicB, computeMultiOutcomePrice, computeMultiOutcomeSharesForCost } from '../services/lmsr.js';
+import { broadcastBet, broadcastMarketUpdate, broadcastEventUpdate } from '../services/sse.js';
 import { isPlatformPaused, getMarketClosedReason } from '../services/marketIntegrity.js';
 import type { PlaceBetBody, BetWithContext } from '../types/index.js';
 
@@ -47,44 +47,33 @@ export default async function betRoutes(app: FastifyInstance) {
 
     const { gns_wagered, confidence, reasoning } = req.body;
 
-    // ── Resolve bet mode: binary (market_id + outcome_index) or event (event_id + outcome_label)
-    let market_id: string;
-    let outcome_index: number;
-    let eventOutcomeLabel: string | undefined;
-
-    if (req.body.market_id && req.body.outcome_index !== undefined) {
-      // Binary mode — existing behaviour
-      market_id = req.body.market_id;
-      outcome_index = req.body.outcome_index;
-    } else if (req.body.event_id && req.body.outcome_label) {
-      // Event outcome mode — find matching child market
-      const { rows: childMarkets } = await app.db.query(
-        `SELECT m.id, m.outcome_label FROM markets m
-         WHERE m.event_id = $1 AND m.resolved = false AND LOWER(m.outcome_label) = LOWER($2)`,
-        [req.body.event_id, req.body.outcome_label]
-      );
-      if (childMarkets.length === 0) {
-        return reply.status(400).send({
-          error: `No outcome matching "${req.body.outcome_label}" found for this event. Use GET /v1/events/${req.body.event_id} to see available outcomes.`,
-        });
-      }
-      market_id = childMarkets[0].id;
-      outcome_index = 0; // Always bet Yes on the matching child market
-      eventOutcomeLabel = childMarkets[0].outcome_label;
-    } else {
-      return reply.status(400).send({
-        error: 'Provide either (market_id + outcome_index) for binary bets, or (event_id + outcome_label) for event outcome bets.',
-      });
-    }
-
-    // ── Market integrity checks (Redis, sub-ms) ──────────────────────────
-    // 1. Circuit breaker: reject all bets if Polymarket API has been down 5+ min
+    // ── Circuit breaker: reject all bets if Polymarket API has been down 5+ min
     if (await isPlatformPaused(app.redis)) {
-      app.log.warn({ agent_id: agentId, market_id }, 'Bet rejected: platform paused (circuit breaker)');
+      app.log.warn({ agent_id: agentId }, 'Bet rejected: platform paused (circuit breaker)');
       return reply.status(503).send({ error: 'Platform temporarily paused — data source unreachable. Bets are disabled until connectivity is restored.' });
     }
 
-    // 2. Market status: reject with specific reason
+    // ── Route: event outcome mode (native multi-outcome LMSR) ──────────
+    if (req.body.event_id && req.body.outcome_label) {
+      return handleEventBet(app, req, reply, agentId, req.body.event_id, req.body.outcome_label, gns_wagered, confidence, reasoning);
+    }
+
+    // ── Route: binary market mode (existing LMSR) ──────────────────────
+    if (req.body.market_id && req.body.outcome_index !== undefined) {
+      return handleBinaryBet(app, req, reply, agentId, req.body.market_id, req.body.outcome_index, gns_wagered, confidence, reasoning);
+    }
+
+    return reply.status(400).send({
+      error: 'Provide either (market_id + outcome_index) for binary bets, or (event_id + outcome_label) for event outcome bets.',
+    });
+  });
+
+  // ── Binary market bet (existing LMSR, unchanged) ─────────────────────
+  async function handleBinaryBet(
+    app: FastifyInstance, _req: any, reply: any,
+    agentId: string, market_id: string, outcome_index: number,
+    gns_wagered: number, confidence: number, reasoning: string,
+  ) {
     const closedReason = await getMarketClosedReason(app.redis, app.db, market_id);
     if (closedReason) {
       const errors: Record<string, string> = {
@@ -92,13 +81,9 @@ export default async function betRoutes(app: FastifyInstance) {
         ended:        'Market has ended — the closing time has passed.',
         closing_soon: 'Market closing soon — betting closed 30 minutes before resolution.',
       };
-      app.log.warn({ agent_id: agentId, market_id, reason: closedReason, ts: new Date().toISOString() }, 'Bet rejected: market closed');
       return reply.status(409).send({ error: errors[closedReason] });
     }
 
-    // 3. Visibility check: only accept bets on markets visible to viewers
-    // Standalone markets (event_id IS NULL) must be active (resolved=false)
-    // Child markets (event_id IS NOT NULL) must belong to a non-resolved event
     const { rows: [visibility] } = await app.db.query(
       `SELECT m.resolved, m.event_id,
               CASE WHEN m.event_id IS NOT NULL
@@ -119,7 +104,6 @@ export default async function betRoutes(app: FastifyInstance) {
     try {
       await client.query('BEGIN');
 
-      // Lock the agent row to prevent race conditions
       const agentResult = await client.query(
         'SELECT id, name, country_code, org, model, gns_balance FROM agents WHERE id = $1 FOR UPDATE',
         [agentId]
@@ -131,7 +115,6 @@ export default async function betRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Insufficient GNS balance' });
       }
 
-      // Lock the market row
       const marketResult = await client.query(
         'SELECT * FROM markets WHERE id = $1 AND resolved = false FOR UPDATE',
         [market_id]
@@ -147,12 +130,10 @@ export default async function betRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid outcome_index' });
       }
 
-      // LMSR calculation
       const quantities: number[] = market.quantities.map(Number);
       const b: number = Number(market.b_parameter);
       const { shares, newQuantities, pricePerShare } = lmsrBuy(quantities, b, outcome_index, gns_wagered);
 
-      // Deduct GNS and update market state
       await client.query(
         'UPDATE agents SET gns_balance = gns_balance - $1 WHERE id = $2',
         [gns_wagered, agentId]
@@ -163,7 +144,6 @@ export default async function betRoutes(app: FastifyInstance) {
         [newQuantities, market_id]
       );
 
-      // Insert bet
       const betResult = await client.query<{ id: string; created_at: string }>(
         `INSERT INTO bets (agent_id, market_id, outcome_index, gns_wagered, shares_received, price_per_share, confidence, reasoning)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -173,7 +153,6 @@ export default async function betRoutes(app: FastifyInstance) {
 
       await client.query('COMMIT');
 
-      // Fetch event title if this is a child market
       let eventTitle: string | null = null;
       if (market.event_id) {
         const { rows: [evt] } = await client.query(
@@ -182,7 +161,6 @@ export default async function betRoutes(app: FastifyInstance) {
         if (evt) eventTitle = evt.title;
       }
 
-      // Build full bet context for SSE broadcast
       const bet: BetWithContext = {
         id: betResult.rows[0].id,
         agent_id: agentId,
@@ -194,7 +172,7 @@ export default async function betRoutes(app: FastifyInstance) {
         confidence,
         reasoning,
         created_at: betResult.rows[0].created_at,
-        outcome_name: eventOutcomeLabel ?? market.outcomes[outcome_index],
+        outcome_name: market.outcomes[outcome_index],
         agent: {
           name: agent.name,
           country_code: agent.country_code,
@@ -210,7 +188,6 @@ export default async function betRoutes(app: FastifyInstance) {
         },
       };
 
-      // Broadcast via SSE (non-blocking)
       const newProbs = lmsrProbs(newQuantities, b);
       broadcastBet(bet);
       broadcastMarketUpdate(market_id, newProbs);
@@ -228,7 +205,210 @@ export default async function betRoutes(app: FastifyInstance) {
     } finally {
       client.release();
     }
-  });
+  }
+
+  // ── Event outcome bet (native multi-outcome LMSR) ────────────────────
+  async function handleEventBet(
+    app: FastifyInstance, _req: any, reply: any,
+    agentId: string, eventId: string, outcomeLabel: string,
+    gns_wagered: number, confidence: number, reasoning: string,
+  ) {
+    const client = await app.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Lock agent
+      const agentResult = await client.query(
+        'SELECT id, name, country_code, org, model, gns_balance FROM agents WHERE id = $1 FOR UPDATE',
+        [agentId]
+      );
+      const agent = agentResult.rows[0];
+      if (agent.gns_balance < gns_wagered) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Insufficient GNS balance' });
+      }
+
+      // Lock event row
+      const { rows: [event] } = await client.query(
+        'SELECT * FROM events WHERE id = $1 AND resolved = false FOR UPDATE',
+        [eventId]
+      );
+      if (!event) {
+        await client.query('ROLLBACK');
+        return reply.status(404).send({ error: 'Event not found or already resolved' });
+      }
+
+      // Get child markets to build ordered outcome list
+      const { rows: children } = await client.query(
+        `SELECT m.id, m.outcome_label, m.initial_probs FROM markets m
+         WHERE m.event_id = $1 AND m.resolved = false
+         ORDER BY m.volume DESC`,
+        [eventId]
+      );
+
+      const outcomeLabels = children.map(c => c.outcome_label as string);
+      const outcomeIndex = outcomeLabels.findIndex(
+        (label) => label.toLowerCase() === outcomeLabel.toLowerCase()
+      );
+
+      if (outcomeIndex === -1) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({
+          error: `No outcome matching "${outcomeLabel}" found. Available: ${outcomeLabels.join(', ')}`,
+        });
+      }
+
+      // Verify event has quantities initialized
+      const quantities: number[] | null = event.quantities?.map(Number) ?? null;
+      if (!quantities || quantities.length !== outcomeLabels.length) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Event LMSR not initialized. Quantities mismatch.' });
+      }
+
+      // Market diversity rule: max 3 bets per outcome per agent per 24hrs
+      const { rows: [recentCount] } = await client.query(
+        `SELECT COUNT(*)::int AS cnt FROM bets b
+         JOIN markets m ON m.id = b.market_id
+         WHERE b.agent_id = $1 AND m.event_id = $2 AND b.outcome_label = $3
+           AND b.created_at > NOW() - INTERVAL '24 hours'`,
+        [agentId, eventId, outcomeLabels[outcomeIndex]]
+      );
+      if (recentCount.cnt >= 3) {
+        await client.query('ROLLBACK');
+        return reply.status(429).send({
+          error: `Rate limited: max 3 bets per outcome per 24 hours. You have ${recentCount.cnt} recent bets on "${outcomeLabels[outcomeIndex]}".`,
+        });
+      }
+
+      // Check if this agent is new to this event
+      const { rows: existingActivity } = await client.query(
+        `SELECT 1 FROM event_agent_activity WHERE event_id = $1 AND agent_id = $2`,
+        [eventId, agentId]
+      );
+      const isNewAgent = existingActivity.length === 0;
+      let activeAgentCount = Number(event.active_agent_count);
+      if (isNewAgent) {
+        activeAgentCount++;
+      }
+
+      // Dynamic b
+      const baseB = Number(event.base_b);
+      const dynamicB = computeDynamicB(baseB, activeAgentCount);
+
+      // Prices before
+      const priceBefore = computeMultiOutcomePrice(quantities, dynamicB);
+      const robullPriceBefore = priceBefore[outcomeIndex];
+
+      // Polymarket probability for calibration
+      const polymarketPrice = children[outcomeIndex].initial_probs
+        ? Number(children[outcomeIndex].initial_probs[0])
+        : null;
+
+      // Calculate shares
+      const shares = computeMultiOutcomeSharesForCost(quantities, outcomeIndex, gns_wagered, dynamicB);
+      const pricePerShare = shares > 0 ? gns_wagered / shares : 0;
+
+      // New quantities
+      const newQuantities = quantities.map((q, i) => (i === outcomeIndex ? q + shares : q));
+
+      // Prices after
+      const priceAfter = computeMultiOutcomePrice(newQuantities, dynamicB);
+      const robullPriceAfter = priceAfter[outcomeIndex];
+      const priceImpact = robullPriceAfter - robullPriceBefore;
+
+      // Verify sum = 1.0
+      const probSum = priceAfter.reduce((a, v) => a + v, 0);
+      if (Math.abs(probSum - 1.0) > 0.0001) {
+        await client.query('ROLLBACK');
+        throw new Error(`LMSR probabilities do not sum to 1.0: ${probSum}`);
+      }
+
+      // Deduct GNS
+      await client.query(
+        'UPDATE agents SET gns_balance = gns_balance - $1 WHERE id = $2',
+        [gns_wagered, agentId]
+      );
+
+      // Update event
+      await client.query(
+        `UPDATE events SET quantities = $1, lmsr_b = $2, active_agent_count = $3, updated_at = NOW() WHERE id = $4`,
+        [newQuantities, dynamicB, activeAgentCount, eventId]
+      );
+
+      // Record agent activity
+      if (isNewAgent) {
+        await client.query(
+          `INSERT INTO event_agent_activity (event_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [eventId, agentId]
+        );
+      }
+
+      // Insert bet (linked to child market for FK)
+      const betResult = await client.query<{ id: string; created_at: string }>(
+        `INSERT INTO bets (agent_id, market_id, outcome_index, gns_wagered, shares_received, price_per_share,
+                           confidence, reasoning, outcome_label, polymarket_price_at_bet, robull_price_at_bet, price_impact)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING id, created_at`,
+        [agentId, children[outcomeIndex].id, outcomeIndex, gns_wagered, shares, pricePerShare,
+         confidence, reasoning, outcomeLabels[outcomeIndex], polymarketPrice, robullPriceBefore, priceImpact]
+      );
+
+      await client.query('COMMIT');
+
+      // SSE broadcast
+      const bet: BetWithContext = {
+        id: betResult.rows[0].id,
+        agent_id: agentId,
+        market_id: children[outcomeIndex].id,
+        outcome_index: outcomeIndex,
+        gns_wagered,
+        shares_received: shares,
+        price_per_share: pricePerShare,
+        confidence,
+        reasoning,
+        created_at: betResult.rows[0].created_at,
+        outcome_name: outcomeLabels[outcomeIndex],
+        agent: {
+          name: agent.name,
+          country_code: agent.country_code,
+          org: agent.org,
+          model: agent.model,
+        },
+        market: {
+          question: event.title,
+          polymarket_url: event.polymarket_url,
+          category: event.category,
+          outcomes: outcomeLabels,
+          closes_at: event.closes_at,
+        },
+      };
+
+      broadcastBet(bet);
+      broadcastEventUpdate(eventId, priceAfter, outcomeLabels);
+
+      return reply.status(201).send({
+        bet_id: betResult.rows[0].id,
+        event_id: eventId,
+        outcome_label: outcomeLabels[outcomeIndex],
+        shares_received: shares,
+        price_per_share: pricePerShare,
+        robull_price_before: robullPriceBefore,
+        robull_price_after: robullPriceAfter,
+        price_impact: priceImpact,
+        polymarket_price: polymarketPrice,
+        new_probs: priceAfter,
+        outcomes: outcomeLabels,
+        active_agents: activeAgentCount,
+        lmsr_b: dynamicB,
+        gns_remaining: Number(agent.gns_balance) - gns_wagered,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 
   // GET /v1/bets
   app.get('/', async (req, reply) => {

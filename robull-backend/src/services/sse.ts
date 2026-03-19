@@ -42,6 +42,21 @@ export function broadcastMarketUpdate(marketId: string, probs: number[]): void {
   dead.forEach((c) => clients.delete(c));
 }
 
+export function broadcastEventUpdate(eventId: string, probs: number[], outcomes: string[]): void {
+  const payload = `data: ${JSON.stringify({ type: 'event_odds', eventId, probs, outcomes })}\n\n`;
+  const dead: FastifyReply[] = [];
+
+  for (const client of clients) {
+    try {
+      (client.raw as any).write(payload);
+    } catch {
+      dead.push(client);
+    }
+  }
+
+  dead.forEach((c) => clients.delete(c));
+}
+
 export function broadcastMarketClosed(marketId: string): void {
   const payload = `data: ${JSON.stringify({ type: 'market_closed', marketId })}\n\n`;
   const dead: FastifyReply[] = [];

@@ -93,3 +93,98 @@ export function bootstrapQuantities(probs: number[], b: number): number[] {
   const minVal = Math.min(...raw);
   return raw.map((q) => q - minVal);
 }
+
+// ─── Multi-Outcome LMSR with Dynamic B ─────────────────────────────────────
+
+/**
+ * Dynamic b-parameter: scales with the number of active agents on an event.
+ * More agents → deeper liquidity → more stable prices.
+ */
+export function computeDynamicB(baseB: number, activeAgents: number): number {
+  return baseB * Math.sqrt(Math.max(activeAgents, 1));
+}
+
+/**
+ * Multi-outcome LMSR cost function: C(q) = b * ln(Σ exp(q_i / b))
+ * Uses log-sum-exp trick for numerical stability.
+ */
+export function computeMultiOutcomeCost(quantities: number[], b: number): number {
+  const scaled = quantities.map((q) => q / b);
+  const max = Math.max(...scaled);
+  const sum = scaled.reduce((acc, v) => acc + Math.exp(v - max), 0);
+  return b * (max + Math.log(sum));
+}
+
+/**
+ * Multi-outcome price function: p_i = exp(q_i / b) / Σ exp(q_j / b)
+ * Uses log-sum-exp trick — guaranteed to sum to 1.0.
+ */
+export function computeMultiOutcomePrice(quantities: number[], b: number): number[] {
+  const scaled = quantities.map((q) => q / b);
+  const max = Math.max(...scaled);
+  const expShifted = scaled.map((v) => Math.exp(v - max));
+  const sumExp = expShifted.reduce((a, v) => a + v, 0);
+  const prices = expShifted.map((e) => e / sumExp);
+
+  // Sanity check: no NaN or Infinity
+  for (const p of prices) {
+    if (!Number.isFinite(p)) {
+      throw new Error(`LMSR price computation produced non-finite value. quantities=${JSON.stringify(quantities)}, b=${b}`);
+    }
+  }
+
+  return prices;
+}
+
+/**
+ * Cost of purchasing `shares` on `outcomeIndex`.
+ * Returns C(q_after) - C(q_before).
+ */
+export function computeMultiOutcomePurchaseCost(
+  quantities: number[],
+  outcomeIndex: number,
+  shares: number,
+  b: number,
+): number {
+  const newQuantities = quantities.map((q, i) => (i === outcomeIndex ? q + shares : q));
+  return computeMultiOutcomeCost(newQuantities, b) - computeMultiOutcomeCost(quantities, b);
+}
+
+/**
+ * Binary search to find shares such that purchase cost ≈ gnsAmount.
+ * Precision: within 0.001 GNS. Max iterations: 100.
+ */
+export function computeMultiOutcomeSharesForCost(
+  quantities: number[],
+  outcomeIndex: number,
+  gnsAmount: number,
+  b: number,
+): number {
+  let lo = 0;
+  let hi = gnsAmount * 100; // generous upper bound
+
+  for (let iter = 0; iter < 100; iter++) {
+    const mid = (lo + hi) / 2;
+    const cost = computeMultiOutcomePurchaseCost(quantities, outcomeIndex, mid, b);
+    if (Math.abs(cost - gnsAmount) < 0.001) {
+      return mid;
+    }
+    if (cost < gnsAmount) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  return (lo + hi) / 2;
+}
+
+/**
+ * Bootstrap multi-outcome event quantities from probabilities.
+ * q_i = b * ln(p_i), with p_i floored at 0.001 to avoid -Infinity.
+ */
+export function bootstrapEventQuantities(probs: number[], b: number): number[] {
+  const raw = probs.map((p) => b * Math.log(Math.max(p, 0.001)));
+  const minVal = Math.min(...raw);
+  return raw.map((q) => q - minVal);
+}
