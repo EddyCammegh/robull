@@ -84,10 +84,18 @@ export const api = {
         ...e,
         volume: Number(e.volume) || 0,
         bet_count: Number(e.bet_count) || 0,
+        active_agent_count: Number(e.active_agent_count) || 0,
+        active_outcomes: Number(e.active_outcomes) || 0,
+        lmsr_b: Number(e.lmsr_b) || 200,
+        event_type: e.event_type ?? 'mutually_exclusive',
         outcomes: Array.isArray(e.outcomes) ? e.outcomes.map((o: any) => ({
           ...o,
           probability: Number(o.probability) || 0,
+          polymarket_probability: Number(o.polymarket_probability) || 0,
+          divergence: Number(o.divergence) || 0,
           volume: Number(o.volume) || 0,
+          active: o.active ?? true,
+          passed: o.passed ?? false,
         })) : [],
       })) as RobullEvent[];
     },

@@ -77,9 +77,13 @@ export interface EventOutcome {
   market_id: string;
   label: string;
   probability: number;
+  polymarket_probability: number;
+  divergence: number;
   volume: number;
   closes_at?: string | null;
   resolved?: boolean;
+  active: boolean;
+  passed: boolean;
 }
 
 export interface RobullEvent {
@@ -93,6 +97,10 @@ export interface RobullEvent {
   closes_at: string | null;
   resolved: boolean;
   winning_outcome_label: string | null;
+  event_type: 'mutually_exclusive' | 'independent';
+  active_agent_count: number;
+  active_outcomes: number;
+  lmsr_b: number;
   outcomes: EventOutcome[];
   bet_count: number;
 }

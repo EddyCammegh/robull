@@ -24,21 +24,17 @@ export default function EventRow({ event }: { event: RobullEvent }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const category = event.category as MarketCategory;
 
-  // Sort: active outcomes first (by probability desc), then expired at the bottom
-  const now = Date.now();
-  const isExpired = (o: EventOutcome) => o.resolved || (o.closes_at && new Date(o.closes_at).getTime() < now);
+  // Sort: active outcomes first (by probability desc), then passed at the bottom
   const sorted = [...event.outcomes].sort((a, b) => {
-    const aExp = isExpired(a) ? 1 : 0;
-    const bExp = isExpired(b) ? 1 : 0;
+    const aExp = a.passed ? 1 : 0;
+    const bExp = b.passed ? 1 : 0;
     if (aExp !== bExp) return aExp - bExp;
     return b.probability - a.probability;
   });
   const shown = sorted.slice(0, visibleCount);
   const hiddenCount = sorted.length - visibleCount;
 
-  // Detect event type: mutually exclusive (sum ~100%) vs independent thresholds (sum >110%)
-  const probSum = event.outcomes.reduce((s, o) => s + o.probability, 0);
-  const isIndependent = probSum > 1.1;
+  const isIndependent = event.event_type === 'independent';
 
   // For mutually exclusive: scale bars relative to leader
   // For independent: scale bars to 100% = 100% probability (absolute)
@@ -146,7 +142,7 @@ export default function EventRow({ event }: { event: RobullEvent }) {
 function OutcomeBar({ outcome, index, isIndependent, maxProb }: {
   outcome: EventOutcome; index: number; isIndependent: boolean; maxProb: number;
 }) {
-  const expired = outcome.resolved || (outcome.closes_at && new Date(outcome.closes_at).getTime() < Date.now());
+  const expired = outcome.passed;
 
   const barWidth = isIndependent
     ? `${outcome.probability * 100}%`

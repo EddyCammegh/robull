@@ -73,7 +73,7 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
       if (e.resolved) return false;
-      if (e.outcomes.length < 2) return false;
+      if ((e.active_outcomes ?? e.outcomes.length) < 1) return false;
       if (category && e.category !== category) return false;
       if (search) {
         const kw = search.toLowerCase();
