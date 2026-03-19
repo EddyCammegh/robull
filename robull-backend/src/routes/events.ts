@@ -1,6 +1,56 @@
 import type { FastifyInstance } from 'fastify';
 import { lmsrProbs, computeMultiOutcomePrice, computeDynamicB, parseNumericArray } from '../services/lmsr.js';
 
+/**
+ * Compute outcome probabilities for a single event.
+ * - mutually_exclusive: use event-level multi-outcome LMSR (sums to 1.0)
+ * - independent: use each child market's binary LMSR independently (may sum to >1.0)
+ */
+function computeOutcomes(evt: any, children: any[]) {
+  const eventType = evt.event_type ?? 'mutually_exclusive';
+  const isIndependent = eventType === 'independent';
+
+  const eventQuantities = parseNumericArray(evt.quantities);
+  const hasEventQuantities = eventQuantities.length > 0;
+  const activeAgentCount = Number(evt.active_agent_count ?? 0);
+  const baseB = Number(evt.base_b ?? 200);
+  const dynamicB = computeDynamicB(baseB, Math.max(activeAgentCount, 1));
+
+  // For mutually exclusive events: compute event-level LMSR probabilities
+  let eventProbs: number[] | null = null;
+  if (!isIndependent && hasEventQuantities && eventQuantities.length === children.length) {
+    eventProbs = computeMultiOutcomePrice(eventQuantities, dynamicB);
+  }
+
+  const outcomes = children.map((child, idx) => {
+    const childProbs = lmsrProbs(
+      parseNumericArray(child.quantities),
+      Number(child.b_parameter)
+    );
+    const initialProbs = parseNumericArray(child.initial_probs);
+    const polymarketProb = initialProbs.length > 0 ? initialProbs[0] : childProbs[0];
+
+    // For independent events: always use child market's own binary LMSR
+    // For mutually exclusive: use event-level LMSR if available
+    const robullProb = isIndependent
+      ? childProbs[0]
+      : (eventProbs ? eventProbs[idx] : childProbs[0]);
+
+    return {
+      market_id: child.id,
+      label: child.outcome_label,
+      probability: robullProb,
+      polymarket_probability: polymarketProb,
+      divergence: robullProb - polymarketProb,
+      volume: Number(child.volume),
+      closes_at: child.closes_at,
+      resolved: child.child_resolved,
+    };
+  });
+
+  return { outcomes, activeAgentCount, dynamicB, eventType };
+}
+
 export default async function eventRoutes(app: FastifyInstance) {
 
   // GET /v1/events — list grouped events with outcomes
@@ -41,42 +91,7 @@ export default async function eventRoutes(app: FastifyInstance) {
         [evt.id]
       );
 
-      const eventQuantities = parseNumericArray(evt.quantities);
-      const hasEventQuantities = eventQuantities.length > 0;
-      const activeAgentCount = Number(evt.active_agent_count ?? 0);
-      const baseB = Number(evt.base_b ?? 200);
-      const dynamicB = computeDynamicB(baseB, Math.max(activeAgentCount, 1));
-
-      // Compute event-level probabilities from native LMSR if initialized
-      let eventProbs: number[] | null = null;
-      if (hasEventQuantities && eventQuantities.length === children.length) {
-        eventProbs = computeMultiOutcomePrice(eventQuantities, dynamicB);
-      }
-
-      const outcomes = children.map((child, idx) => {
-        // Polymarket probability (from child market Yes price)
-        const childProbs = lmsrProbs(
-          parseNumericArray(child.quantities),
-          Number(child.b_parameter)
-        );
-        const initialProbs = parseNumericArray(child.initial_probs);
-        const polymarketProb = initialProbs.length > 0 ? initialProbs[0] : childProbs[0];
-
-        // Robull probability: use event-level LMSR if available, else fall back to child
-        const robullProb = eventProbs ? eventProbs[idx] : childProbs[0];
-
-        return {
-          market_id: child.id,
-          label: child.outcome_label,
-          probability: robullProb,
-          polymarket_probability: polymarketProb,
-          divergence: robullProb - polymarketProb,
-          volume: Number(child.volume),
-          closes_at: child.closes_at,
-          resolved: child.child_resolved,
-        };
-      });
-
+      const { outcomes, activeAgentCount, dynamicB, eventType } = computeOutcomes(evt, children);
       const totalBets = children.reduce((s, c) => s + c.bet_count, 0);
 
       return {
@@ -90,6 +105,7 @@ export default async function eventRoutes(app: FastifyInstance) {
         closes_at: evt.closes_at,
         resolved: evt.resolved,
         winning_outcome_label: evt.winning_outcome_label,
+        event_type: eventType,
         active_agent_count: activeAgentCount,
         lmsr_b: dynamicB,
         outcomes,
@@ -104,7 +120,7 @@ export default async function eventRoutes(app: FastifyInstance) {
   // GET /v1/debug/quantities — temporary debug endpoint
   app.get('/debug/quantities', async (_req, reply) => {
     const { rows: sample } = await app.db.query(`
-      SELECT e.id, e.title, e.quantities, e.lmsr_b, e.base_b, e.active_agent_count,
+      SELECT e.id, e.title, e.quantities, e.lmsr_b, e.base_b, e.active_agent_count, e.event_type,
              array_length(e.quantities, 1) AS qty_len,
              (SELECT COUNT(*)::int FROM markets m WHERE m.event_id = e.id AND m.resolved = false) AS child_count
       FROM events e
@@ -117,13 +133,14 @@ export default async function eventRoutes(app: FastifyInstance) {
       const isAllZero = parsed.length > 0 ? parsed.every((v: number) => v === 0) : null;
       const hasNaN = parsed.length > 0 ? parsed.some((v: number) => isNaN(v)) : null;
       let probabilities: number[] | null = null;
-      if (parsed.length > 0 && parsed.length === row.child_count) {
+      if (parsed.length > 0 && parsed.length === row.child_count && row.event_type !== 'independent') {
         try { probabilities = computeMultiOutcomePrice(parsed, Number(row.lmsr_b ?? 200)); } catch {}
       }
 
       return {
         id: row.id,
         title: row.title?.slice(0, 60),
+        event_type: row.event_type,
         quantities_raw: raw,
         quantities_parsed: parsed,
         quantities_type: raw === null ? 'null' : typeof raw,
@@ -146,6 +163,8 @@ export default async function eventRoutes(app: FastifyInstance) {
         COUNT(*)::int AS total_events,
         COUNT(quantities)::int AS with_quantities,
         COUNT(CASE WHEN array_length(quantities, 1) > 0 THEN 1 END)::int AS with_nonempty_quantities,
+        COUNT(CASE WHEN event_type = 'independent' THEN 1 END)::int AS independent_events,
+        COUNT(CASE WHEN event_type = 'mutually_exclusive' THEN 1 END)::int AS mutually_exclusive_events,
         (SELECT COUNT(*)::int FROM markets WHERE event_id IS NOT NULL) AS child_markets,
         (SELECT COUNT(*)::int FROM markets WHERE event_id IS NULL AND resolved = false) AS standalone_markets
       FROM events
@@ -167,41 +186,15 @@ export default async function eventRoutes(app: FastifyInstance) {
     }
 
     const { rows: children } = await app.db.query(
-      `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter, m.initial_probs
+      `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter, m.initial_probs,
+              m.closes_at, m.resolved AS child_resolved
        FROM markets m
        WHERE m.event_id = $1
        ORDER BY m.volume DESC`,
       [id]
     );
 
-    const eventQuantities = parseNumericArray(evt.quantities);
-      const hasEventQuantities = eventQuantities.length > 0;
-    const activeAgentCount = Number(evt.active_agent_count ?? 0);
-    const baseB = Number(evt.base_b ?? 200);
-    const dynamicB = computeDynamicB(baseB, Math.max(activeAgentCount, 1));
-
-    let eventProbs: number[] | null = null;
-    if (eventQuantities && eventQuantities.length === children.length) {
-      eventProbs = computeMultiOutcomePrice(eventQuantities, dynamicB);
-    }
-
-    const outcomes = children.map((child, idx) => {
-      const childProbs = lmsrProbs(
-        (child.quantities as number[]).map(Number),
-        Number(child.b_parameter)
-      );
-      const polymarketProb = Number(child.initial_probs?.[0] ?? childProbs[0]);
-      const robullProb = eventProbs ? eventProbs[idx] : childProbs[0];
-
-      return {
-        market_id: child.id,
-        label: child.outcome_label,
-        probability: robullProb,
-        polymarket_probability: polymarketProb,
-        divergence: robullProb - polymarketProb,
-        volume: Number(child.volume),
-      };
-    });
+    const { outcomes, activeAgentCount, dynamicB, eventType } = computeOutcomes(evt, children);
 
     // Fetch all bets on any child market
     const childIds = children.map(c => c.id);
@@ -227,6 +220,7 @@ export default async function eventRoutes(app: FastifyInstance) {
       closes_at: evt.closes_at,
       resolved: evt.resolved,
       winning_outcome_label: evt.winning_outcome_label,
+      event_type: eventType,
       active_agent_count: activeAgentCount,
       lmsr_b: dynamicB,
       outcomes,

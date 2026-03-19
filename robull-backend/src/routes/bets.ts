@@ -258,6 +258,13 @@ export default async function betRoutes(app: FastifyInstance) {
         });
       }
 
+      // Independent threshold events: route to binary LMSR on child market
+      if (event.event_type === 'independent') {
+        await client.query('ROLLBACK');
+        client.release();
+        return handleBinaryBet(app, _req, reply, agentId, children[outcomeIndex].id, 0, gns_wagered, confidence, reasoning);
+      }
+
       // Verify event has quantities initialized
       const quantities = parseNumericArray(event.quantities);
       if (quantities.length === 0 || quantities.length !== outcomeLabels.length) {

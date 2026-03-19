@@ -117,8 +117,15 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         childrenSynced++;
       }
 
+      // Detect event type: mutually exclusive vs independent threshold
+      const childProbs = evt.child_markets.map((child) => {
+        const yesProb = child.initial_probs[0] ?? 0;
+        return Math.min(Math.max(yesProb, 0.001), 0.999);
+      });
+      const probSum = childProbs.reduce((a, v) => a + v, 0);
+      const eventType = probSum > 1.1 ? 'independent' : 'mutually_exclusive';
+
       // Always (re)initialise event-level LMSR quantities if active_agent_count is 0
-      // (no agents have bet yet, so it's safe to recalculate from Polymarket prices)
       const { rows: [evtState] } = await db.query(
         'SELECT quantities, active_agent_count FROM events WHERE id = $1',
         [eventId]
@@ -128,16 +135,26 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const hasAgentActivity = Number(evtState.active_agent_count ?? 0) > 0;
 
       if (!hasQuantities || !hasAgentActivity) {
-        // Build probability vector from child markets' Yes prices
-        const BASE_B = 200;
-        const childProbs = evt.child_markets.map((child) => {
-          const yesProb = child.initial_probs[0] ?? 0;
-          return Math.min(Math.max(yesProb, 0.001), 0.999); // floor 0.001, ceiling 0.999
-        });
-        const eventQuantities = bootstrapEventQuantities(childProbs, BASE_B);
+        if (eventType === 'mutually_exclusive') {
+          // Multi-outcome LMSR: probabilities sum to 1.0
+          const BASE_B = 200;
+          const eventQuantities = bootstrapEventQuantities(childProbs, BASE_B);
+          await db.query(
+            `UPDATE events SET quantities = $1, base_b = $2, lmsr_b = $2, active_agent_count = 0, event_type = $4 WHERE id = $3`,
+            [eventQuantities, BASE_B, eventId, eventType]
+          );
+        } else {
+          // Independent: no event-level quantities, each child uses its own binary LMSR
+          await db.query(
+            `UPDATE events SET quantities = NULL, event_type = $2, active_agent_count = 0 WHERE id = $1`,
+            [eventId, eventType]
+          );
+        }
+      } else {
+        // Just update event_type if it changed
         await db.query(
-          `UPDATE events SET quantities = $1, base_b = $2, lmsr_b = $2, active_agent_count = 0 WHERE id = $3`,
-          [eventQuantities, BASE_B, eventId]
+          `UPDATE events SET event_type = $1 WHERE id = $2`,
+          [eventType, eventId]
         );
       }
 

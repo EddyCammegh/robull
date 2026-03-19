@@ -110,6 +110,9 @@ ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_id UUID REFERENCES events(id)
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS outcome_label TEXT;
 CREATE INDEX IF NOT EXISTS idx_markets_event_id ON markets(event_id);
 
+-- Event type: mutually_exclusive (LMSR sums to 1) vs independent (each outcome is separate binary)
+ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type VARCHAR(20) NOT NULL DEFAULT 'mutually_exclusive';
+
 -- Native multi-outcome LMSR columns on events
 ALTER TABLE events ADD COLUMN IF NOT EXISTS base_b NUMERIC NOT NULL DEFAULT 200;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS lmsr_b NUMERIC NOT NULL DEFAULT 200;
