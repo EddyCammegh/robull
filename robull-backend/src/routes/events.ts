@@ -90,18 +90,40 @@ export default async function eventRoutes(app: FastifyInstance) {
 
     conditions.push(`e.resolved = ${resolved === 'true' ? 'true' : 'false'}`);
 
-    const { rows: events } = await app.db.query(
-      `SELECT e.*
-       FROM events e
-       WHERE ${conditions.join(' AND ')}
-       ORDER BY e.volume DESC`,
-      params
-    );
+    // ── Diagnostic logging (temporary) ──────────────────────────────────
+    const sqlQuery = `SELECT e.* FROM events e WHERE ${conditions.join(' AND ')} ORDER BY e.volume DESC`;
+    console.log(`[diag:events] SQL: ${sqlQuery} | params: ${JSON.stringify(params)}`);
+
+    const { rows: [dbCounts] } = await app.db.query(`
+      SELECT COUNT(*)::int AS total,
+             COUNT(CASE WHEN resolved = false THEN 1 END)::int AS unresolved,
+             COUNT(quantities)::int AS with_qty,
+             COUNT(CASE WHEN array_length(quantities, 1) > 0 THEN 1 END)::int AS with_nonempty_qty
+      FROM events
+    `);
+    console.log(`[diag:events] DB totals: total=${dbCounts.total}, unresolved=${dbCounts.unresolved}, with_qty=${dbCounts.with_qty}, with_nonempty_qty=${dbCounts.with_nonempty_qty}`);
+
+    const { rows: events } = await app.db.query(sqlQuery, params);
+    console.log(`[diag:events] Query returned ${events.length} events`);
+
+    // Test first event with quantities
+    if (events.length > 0) {
+      const testEvt = events.find(e => e.quantities !== null) ?? events[0];
+      const testQ = parseNumericArray(testEvt.quantities);
+      console.log(`[diag:events] Sample event: "${testEvt.title?.slice(0, 50)}" | event_type=${testEvt.event_type} | quantities type=${typeof testEvt.quantities} | parsed len=${testQ.length} | first3=${JSON.stringify(testQ.slice(0, 3))}`);
+      if (testQ.length > 0 && testEvt.event_type !== 'independent') {
+        try {
+          const testProbs = computeMultiOutcomePrice(testQ, Number(testEvt.lmsr_b ?? 200));
+          console.log(`[diag:events] Sample probs: [${testProbs.slice(0, 3).map(p => p.toFixed(4))}...] sum=${testProbs.reduce((a, v) => a + v, 0).toFixed(6)}`);
+        } catch (err) {
+          console.error(`[diag:events] computeMultiOutcomePrice FAILED:`, err);
+        }
+      }
+    }
+    // ── End diagnostic logging ───────────────────────────────────────────
 
     const result = await Promise.all(events.map(async (evt) => {
       // Fetch ALL child markets — including resolved/passed ones.
-      // Probabilities use the full quantities vector; resolved outcomes
-      // are marked as passed but still included.
       const { rows: children } = await app.db.query(
         `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter,
                 m.initial_probs, m.closes_at, m.resolved AS child_resolved,
@@ -138,8 +160,22 @@ export default async function eventRoutes(app: FastifyInstance) {
       };
     }));
 
-    // Show events that have at least 1 active outcome
-    return reply.send(result.filter(e => e.active_outcomes >= 1));
+    // ── Diagnostic: filter logging ─────────────────────────────────────
+    const beforeFilter = result.length;
+    const filtered = result.filter(e => e.active_outcomes >= 1);
+    const dropped = result.filter(e => e.active_outcomes < 1);
+    console.log(`[diag:events] Before filter: ${beforeFilter} | After filter: ${filtered.length} | Dropped: ${dropped.length}`);
+    if (dropped.length > 0) {
+      const sampleDropped = dropped.slice(0, 3).map(e => `"${e.title?.slice(0, 40)}" (outcomes=${e.outcomes.length}, active=${e.active_outcomes})`);
+      console.log(`[diag:events] Dropped samples: ${sampleDropped.join(', ')}`);
+    }
+    // Check probabilities in results
+    const withProbs = filtered.filter(e => e.outcomes.some((o: any) => o.probability > 0)).length;
+    const withoutProbs = filtered.length - withProbs;
+    console.log(`[diag:events] Results with probabilities: ${withProbs} | Without: ${withoutProbs}`);
+    // ── End diagnostic ──────────────────────────────────────────────────
+
+    return reply.send(filtered);
   });
 
   // GET /v1/debug/quantities — temporary debug endpoint
