@@ -20,6 +20,8 @@ function computeOutcomes(evt: any, children: any[]) {
   let eventProbs: number[] | null = null;
   if (!isIndependent && hasEventQuantities && eventQuantities.length === children.length) {
     eventProbs = computeMultiOutcomePrice(eventQuantities, dynamicB);
+  } else if (!isIndependent && hasEventQuantities) {
+    console.warn(`[events] LMSR length mismatch for "${evt.title?.slice(0, 50)}": quantities=${eventQuantities.length}, children=${children.length}`);
   }
 
   const outcomes = children.map((child, idx) => {
@@ -85,7 +87,7 @@ export default async function eventRoutes(app: FastifyInstance) {
                 COUNT(b.id)::int AS bet_count
          FROM markets m
          LEFT JOIN bets b ON b.market_id = m.id
-         WHERE m.event_id = $1
+         WHERE m.event_id = $1 AND m.resolved = false
          GROUP BY m.id
          ORDER BY m.volume DESC`,
         [evt.id]
@@ -189,7 +191,7 @@ export default async function eventRoutes(app: FastifyInstance) {
       `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter, m.initial_probs,
               m.closes_at, m.resolved AS child_resolved
        FROM markets m
-       WHERE m.event_id = $1
+       WHERE m.event_id = $1 AND m.resolved = false
        ORDER BY m.volume DESC`,
       [id]
     );
