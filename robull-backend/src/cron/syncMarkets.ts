@@ -118,7 +118,9 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       }
 
       // Detect event type: mutually exclusive vs independent threshold
-      const childProbs = evt.child_markets.map((child) => {
+      // Sort by polymarket_id for deterministic index alignment with quantities vector
+      const sortedChildren = [...evt.child_markets].sort((a, b) => a.polymarket_id.localeCompare(b.polymarket_id));
+      const childProbs = sortedChildren.map((child) => {
         const yesProb = child.initial_probs[0] ?? 0;
         return Math.min(Math.max(yesProb, 0.001), 0.999);
       });

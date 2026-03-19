@@ -89,6 +89,11 @@ UPDATE markets SET resolved = true WHERE closes_at < NOW() AND resolved = false 
 UPDATE markets SET resolved = false, updated_at = NOW()
 WHERE event_id IS NOT NULL AND resolved = true AND winning_outcome IS NULL;
 
+-- Fix: force re-initialisation of event quantities in correct polymarket_id order.
+-- Reset active_agent_count so sync will re-bootstrap quantities.
+UPDATE events SET quantities = NULL, active_agent_count = 0
+WHERE active_agent_count = 0;
+
 -- Event title for sports match context (e.g. "Nashville SC vs. Orlando City SC")
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_title TEXT;
 

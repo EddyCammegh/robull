@@ -242,7 +242,7 @@ export default async function betRoutes(app: FastifyInstance) {
       const { rows: children } = await client.query(
         `SELECT m.id, m.outcome_label, m.initial_probs, m.resolved, m.closes_at FROM markets m
          WHERE m.event_id = $1
-         ORDER BY m.volume DESC`,
+         ORDER BY m.polymarket_id ASC`,
         [eventId]
       );
 

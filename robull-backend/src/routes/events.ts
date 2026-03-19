@@ -132,7 +132,7 @@ export default async function eventRoutes(app: FastifyInstance) {
          LEFT JOIN bets b ON b.market_id = m.id
          WHERE m.event_id = $1
          GROUP BY m.id
-         ORDER BY m.volume DESC`,
+         ORDER BY m.polymarket_id ASC`,
         [evt.id]
       );
 
