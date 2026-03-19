@@ -268,8 +268,8 @@ export default async function betRoutes(app: FastifyInstance) {
         });
       }
 
-      // Independent threshold events: route to binary LMSR on child market
-      if (event.event_type === 'independent') {
+      // Independent/sports_props events: route to binary LMSR on child market
+      if (event.event_type === 'independent' || event.event_type === 'sports_props') {
         await client.query('ROLLBACK');
         client.release();
         return handleBinaryBet(app, _req, reply, agentId, children[outcomeIndex].id, 0, gns_wagered, confidence, reasoning);

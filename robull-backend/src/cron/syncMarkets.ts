@@ -117,7 +117,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         childrenSynced++;
       }
 
-      // Detect event type: mutually exclusive vs independent threshold
+      // Detect event type
       // Sort by polymarket_id for deterministic index alignment with quantities vector
       const sortedChildren = [...evt.child_markets].sort((a, b) => a.polymarket_id.localeCompare(b.polymarket_id));
       const childProbs = sortedChildren.map((child) => {
@@ -125,7 +125,22 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         return Math.min(Math.max(yesProb, 0.001), 0.999);
       });
       const probSum = childProbs.reduce((a, v) => a + v, 0);
-      const eventType = probSum > 1.1 ? 'independent' : 'mutually_exclusive';
+
+      // Detect heterogeneous sports prop events (moneyline + player props + spreads mixed together)
+      const PROP_PATTERNS = /\b(O\/U|Spread|Moneyline|Points O\/U|Rebounds|Assists|1H|Over\/Under|Total Points|Three Pointers|Steals|Blocks|Turnovers)\b/i;
+      const labels = evt.child_markets.map((c) => c.outcome_label);
+      const hasPropMarkets = labels.some((l) => PROP_PATTERNS.test(l));
+      const isMixedSportsProps = hasPropMarkets && labels.length > 8;
+
+      let eventType: string;
+      if (isMixedSportsProps) {
+        // Mixed sports props: treat each child as standalone binary, not a grouped event
+        eventType = 'sports_props';
+      } else if (probSum > 1.1) {
+        eventType = 'independent';
+      } else {
+        eventType = 'mutually_exclusive';
+      }
 
       // Always (re)initialise event-level LMSR quantities if active_agent_count is 0
       const { rows: [evtState] } = await db.query(
@@ -146,7 +161,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
             [eventQuantities, BASE_B, eventId, eventType]
           );
         } else {
-          // Independent: no event-level quantities, each child uses its own binary LMSR
+          // Independent or sports_props: no event-level quantities, each child uses its own binary LMSR
           await db.query(
             `UPDATE events SET quantities = NULL, event_type = $2, active_agent_count = 0 WHERE id = $1`,
             [eventId, eventType]

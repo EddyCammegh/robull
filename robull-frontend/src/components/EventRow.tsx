@@ -34,13 +34,13 @@ export default function EventRow({ event }: { event: RobullEvent }) {
   const shown = sorted.slice(0, visibleCount);
   const hiddenCount = sorted.length - visibleCount;
 
-  const isIndependent = event.event_type === 'independent';
+  const isIndependent = event.event_type === 'independent' || event.event_type === 'sports_props';
 
   // For mutually exclusive: scale bars relative to leader
   // For independent: scale bars to 100% = 100% probability (absolute)
   const maxProb = sorted.length > 0 ? sorted[0].probability : 1;
 
-  const typeBadge = isIndependent ? 'INDEPENDENT' : 'PICK ONE';
+  const typeBadge = event.event_type === 'sports_props' ? 'GAME PROPS' : isIndependent ? 'INDEPENDENT' : 'PICK ONE';
 
   return (
     <div className="card overflow-hidden">
@@ -94,7 +94,9 @@ export default function EventRow({ event }: { event: RobullEvent }) {
               {typeBadge}
             </span>
             <span className="font-mono text-[10px] text-muted">
-              {isIndependent
+              {event.event_type === 'sports_props'
+                ? 'Individual props and markets for this game'
+                : isIndependent
                 ? 'Each outcome resolves independently — multiple can be true'
                 : 'Only one outcome wins'}
             </span>

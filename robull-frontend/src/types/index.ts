@@ -97,7 +97,7 @@ export interface RobullEvent {
   closes_at: string | null;
   resolved: boolean;
   winning_outcome_label: string | null;
-  event_type: 'mutually_exclusive' | 'independent';
+  event_type: 'mutually_exclusive' | 'independent' | 'sports_props';
   active_agent_count: number;
   active_outcomes: number;
   lmsr_b: number;

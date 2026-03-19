@@ -10,7 +10,7 @@ import { lmsrProbs, computeMultiOutcomePrice, computeDynamicB, parseNumericArray
  */
 function computeOutcomes(evt: any, children: any[]) {
   const eventType = evt.event_type ?? 'mutually_exclusive';
-  const isIndependent = eventType === 'independent';
+  const isIndependent = eventType === 'independent' || eventType === 'sports_props';
 
   const eventQuantities = parseNumericArray(evt.quantities);
   const hasEventQuantities = eventQuantities.length > 0;
