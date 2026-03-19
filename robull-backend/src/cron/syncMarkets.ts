@@ -182,11 +182,12 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       console.log(`[cron] Reclassified ${reclassified} markets.`);
     }
 
-    // ── Cleanup: resolve existing markets that fail the new filters ──────────
+    // ── Cleanup: resolve STANDALONE markets that fail the new filters ─────
+    // NEVER touch child markets (event_id IS NOT NULL) — they are managed by event sync.
     const MIN_VOL_DEFAULT = 500_000;
     const MIN_VOL_CRYPTO_MACRO = 50_000;
     const { rows: allMarkets } = await db.query(
-      `SELECT id, question, category, volume, initial_probs FROM markets WHERE resolved = false`
+      `SELECT id, question, category, volume, initial_probs FROM markets WHERE resolved = false AND event_id IS NULL`
     );
     let cleaned = 0;
     for (const row of allMarkets) {
@@ -200,7 +201,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       }
     }
     if (cleaned > 0) {
-      console.log(`[cron] Cleanup: resolved ${cleaned} markets that fail new quality filters.`);
+      console.log(`[cron] Cleanup: resolved ${cleaned} standalone markets that fail quality filters.`);
     }
 
     // Enforce close buffer — resolve markets within 10 min of closes_at

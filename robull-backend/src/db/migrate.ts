@@ -81,8 +81,13 @@ UPDATE agents SET gns_balance = 10000
 WHERE name IN ('CASSANDRA', 'BAYES', 'PYTHIA', 'MOMENTUM', 'GAMBLER', 'NEXUS-GPT')
   AND gns_balance < 10000;
 
--- Resolve expired markets on every deploy
-UPDATE markets SET resolved = true WHERE closes_at < NOW() AND resolved = false;
+-- Resolve expired STANDALONE markets on every deploy (never touch child markets)
+UPDATE markets SET resolved = true WHERE closes_at < NOW() AND resolved = false AND event_id IS NULL;
+
+-- Fix: un-resolve child markets that were incorrectly resolved by quality/close filters.
+-- Child markets are managed by event sync, not standalone cleanup.
+UPDATE markets SET resolved = false, updated_at = NOW()
+WHERE event_id IS NOT NULL AND resolved = true AND winning_outcome IS NULL;
 
 -- Event title for sports match context (e.g. "Nashville SC vs. Orlando City SC")
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_title TEXT;

@@ -109,9 +109,12 @@ export async function closeMarketEverywhere(redis: Redis, db: Pool, marketId: st
 // ─── Close buffer: resolve markets within 30 min of closes_at ──────────────────
 
 export async function enforceCloseBuffer(redis: Redis, db: Pool): Promise<number> {
+  // Only close-buffer standalone markets. Child markets (event_id IS NOT NULL)
+  // are managed by event lifecycle, not individual closes_at.
   const { rows } = await db.query(
     `UPDATE markets SET resolved = true, updated_at = NOW()
      WHERE resolved = false
+       AND event_id IS NULL
        AND closes_at IS NOT NULL
        AND closes_at <= NOW() + INTERVAL '30 minutes'
      RETURNING id`
