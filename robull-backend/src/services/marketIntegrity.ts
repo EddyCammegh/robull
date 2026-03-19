@@ -91,6 +91,12 @@ export async function recordApiFailure(redis: Redis): Promise<void> {
 // ─── Close a market everywhere (DB + Redis + SSE) ──────────────────────────────
 
 export async function closeMarketEverywhere(redis: Redis, db: Pool, marketId: string, winningOutcome?: number | null): Promise<void> {
+  // Get event_id before closing, so we can check the parent event
+  const { rows: [market] } = await db.query(
+    'SELECT event_id FROM markets WHERE id = $1',
+    [marketId]
+  );
+
   if (winningOutcome != null) {
     await db.query(
       'UPDATE markets SET resolved = true, winning_outcome = $2, updated_at = NOW() WHERE id = $1 AND resolved = false',
@@ -104,6 +110,36 @@ export async function closeMarketEverywhere(redis: Redis, db: Pool, marketId: st
   }
   await setMarketStatus(redis, marketId, 'closed');
   broadcastMarketClosed(marketId);
+
+  // If this is a child market, check if the parent event should resolve
+  if (market?.event_id) {
+    await checkEventResolution(db, market.event_id);
+  }
+}
+
+/**
+ * Only resolve a parent event when ALL its child markets have resolved.
+ * If any child is still active, keep the event open.
+ */
+export async function checkEventResolution(db: Pool, eventId: string): Promise<void> {
+  const { rows: [counts] } = await db.query(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(CASE WHEN resolved = false THEN 1 END)::int AS active
+     FROM markets WHERE event_id = $1`,
+    [eventId]
+  );
+
+  if (counts.total > 0 && counts.active === 0) {
+    // All children resolved — resolve the parent event
+    await db.query(
+      'UPDATE events SET resolved = true, updated_at = NOW() WHERE id = $1 AND resolved = false',
+      [eventId]
+    );
+    console.log(`[event] All ${counts.total} outcomes resolved — closing event ${eventId}`);
+  } else {
+    console.log(`[event] Keeping event ${eventId} open — ${counts.active} of ${counts.total} outcomes still active`);
+  }
 }
 
 // ─── Close buffer: resolve markets within 30 min of closes_at ──────────────────

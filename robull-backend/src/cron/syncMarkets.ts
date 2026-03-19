@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
 import { fetchPolymarkets, classifyCategory, isLowQualityMarket, isExcludedCategory, isF1Market, fetchRecentlySettledMarkets, fetchMarketStatus, fetchPolymarketEvents } from '../services/polymarket.js';
-import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
+import { recordApiSuccess, recordApiFailure, enforceCloseBuffer, checkEventResolution } from '../services/marketIntegrity.js';
 import { bootstrapEventQuantities, parseNumericArray } from '../services/lmsr.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
@@ -241,7 +241,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const settledMap = new Map(settled.map(s => [s.polymarketId, s.winningOutcome]));
       const polyIds = settled.map(s => s.polymarketId);
       const { rows: dbMatches } = await db.query(
-        `SELECT id, polymarket_id, question FROM markets
+        `SELECT id, polymarket_id, question, event_id FROM markets
          WHERE polymarket_id = ANY($1) AND winning_outcome IS NULL`,
         [polyIds]
       );
@@ -254,6 +254,10 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
           );
           console.log(`[backfill:bulk] winning_outcome=${winner} for "${m.question?.slice(0, 60)}"`);
           totalFilled++;
+          // If this is a child market, check if parent event should resolve
+          if (m.event_id) {
+            await checkEventResolution(db, m.event_id);
+          }
         }
       }
       console.log(`[cron] Backfill bulk: ${settled.length} settled on Polymarket, ${dbMatches.length} matched our DB.`);
@@ -261,7 +265,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
 
     // --- B) Per-market check for our resolved markets still missing outcome ---
     const { rows: missingOutcome } = await db.query(
-      `SELECT id, polymarket_id, question FROM markets
+      `SELECT id, polymarket_id, question, event_id FROM markets
        WHERE resolved = true AND winning_outcome IS NULL
        ORDER BY updated_at DESC LIMIT 20`
     );
@@ -275,6 +279,9 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
           );
           console.log(`[backfill:per-market] winning_outcome=${status.winningOutcome} for "${m.question?.slice(0, 60)}"`);
           totalFilled++;
+          if (m.event_id) {
+            await checkEventResolution(db, m.event_id);
+          }
         }
       }
       console.log(`[cron] Backfill per-market: checked ${missingOutcome.length}, still awaiting Polymarket settlement.`);

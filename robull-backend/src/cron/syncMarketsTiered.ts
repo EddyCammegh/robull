@@ -32,9 +32,10 @@ export async function syncTier(db: Pool, redis: Redis, tier: Tier): Promise<void
     console.log(`[integrity:${tier}] Close buffer resolved ${buffered} markets.`);
   }
 
+  // Only check standalone markets — child markets are managed by event lifecycle
   const { rows: markets } = await db.query(
     `SELECT id, polymarket_id, closes_at FROM markets
-     WHERE resolved = false AND ${TIER_FILTERS[tier]}`
+     WHERE resolved = false AND event_id IS NULL AND ${TIER_FILTERS[tier]}`
   );
 
   if (markets.length === 0) return;
