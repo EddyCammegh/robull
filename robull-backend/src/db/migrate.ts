@@ -95,20 +95,23 @@ UPDATE events SET quantities = NULL, active_agent_count = 0
 WHERE active_agent_count = 0;
 
 -- Remove SPORTS, ENTERTAINMENT, OTHER markets and events permanently
--- Set winning_outcome = -1 so un-resolve migrations don't resurrect them
-UPDATE markets SET resolved = true, winning_outcome = COALESCE(winning_outcome, -1), updated_at = NOW()
+UPDATE markets SET resolved = true, updated_at = NOW()
 WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER');
 
 UPDATE events SET resolved = true, updated_at = NOW()
 WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER');
 
 -- Remove F1 markets even if categorised under allowed categories
--- Use word-boundary matching to avoid false positives
 UPDATE markets SET resolved = true, updated_at = NOW()
 WHERE resolved = false AND (question ~* '\mF1\M' OR question ILIKE '%Formula 1%' OR question ILIKE '%Formula One%' OR question ILIKE '%Grand Prix%');
 
 UPDATE events SET resolved = true, updated_at = NOW()
 WHERE resolved = false AND (title ~* '\mF1\M' OR title ILIKE '%Formula 1%' OR title ILIKE '%Formula One%' OR title ILIKE '%Grand Prix%');
+
+-- Fix: clear sentinel winning_outcome=-1 from valid markets in allowed categories
+UPDATE markets SET resolved = false, winning_outcome = NULL, updated_at = NOW()
+WHERE winning_outcome = -1
+  AND category IN ('POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH');
 
 -- Fix: un-resolve valid markets in allowed categories that were incorrectly resolved
 UPDATE markets SET resolved = false, updated_at = NOW()
