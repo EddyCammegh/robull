@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { lmsrProbs, computeMultiOutcomePrice, computeDynamicB } from '../services/lmsr.js';
+import { lmsrProbs, computeMultiOutcomePrice, computeDynamicB, parseNumericArray } from '../services/lmsr.js';
 
 export default async function eventRoutes(app: FastifyInstance) {
 
@@ -41,24 +41,26 @@ export default async function eventRoutes(app: FastifyInstance) {
         [evt.id]
       );
 
-      const eventQuantities: number[] | null = evt.quantities?.map(Number) ?? null;
+      const eventQuantities = parseNumericArray(evt.quantities);
+      const hasEventQuantities = eventQuantities.length > 0;
       const activeAgentCount = Number(evt.active_agent_count ?? 0);
       const baseB = Number(evt.base_b ?? 200);
       const dynamicB = computeDynamicB(baseB, Math.max(activeAgentCount, 1));
 
       // Compute event-level probabilities from native LMSR if initialized
       let eventProbs: number[] | null = null;
-      if (eventQuantities && eventQuantities.length === children.length) {
+      if (hasEventQuantities && eventQuantities.length === children.length) {
         eventProbs = computeMultiOutcomePrice(eventQuantities, dynamicB);
       }
 
       const outcomes = children.map((child, idx) => {
         // Polymarket probability (from child market Yes price)
         const childProbs = lmsrProbs(
-          (child.quantities as number[]).map(Number),
+          parseNumericArray(child.quantities),
           Number(child.b_parameter)
         );
-        const polymarketProb = Number(child.initial_probs?.[0] ?? childProbs[0]);
+        const initialProbs = parseNumericArray(child.initial_probs);
+        const polymarketProb = initialProbs.length > 0 ? initialProbs[0] : childProbs[0];
 
         // Robull probability: use event-level LMSR if available, else fall back to child
         const robullProb = eventProbs ? eventProbs[idx] : childProbs[0];
@@ -111,9 +113,13 @@ export default async function eventRoutes(app: FastifyInstance) {
 
     const debug = sample.map((row) => {
       const raw = row.quantities;
-      const parsed = Array.isArray(raw) ? raw.map(Number) : null;
-      const isAllZero = parsed ? parsed.every((v: number) => v === 0) : null;
-      const hasNaN = parsed ? parsed.some((v: number) => isNaN(v)) : null;
+      const parsed = parseNumericArray(raw);
+      const isAllZero = parsed.length > 0 ? parsed.every((v: number) => v === 0) : null;
+      const hasNaN = parsed.length > 0 ? parsed.some((v: number) => isNaN(v)) : null;
+      let probabilities: number[] | null = null;
+      if (parsed.length > 0 && parsed.length === row.child_count) {
+        try { probabilities = computeMultiOutcomePrice(parsed, Number(row.lmsr_b ?? 200)); } catch {}
+      }
 
       return {
         id: row.id,
@@ -129,7 +135,9 @@ export default async function eventRoutes(app: FastifyInstance) {
         active_agent_count: row.active_agent_count,
         is_all_zero: isAllZero,
         has_nan: hasNaN,
-        length_match: parsed ? parsed.length === row.child_count : false,
+        probabilities,
+        prob_sum: probabilities ? probabilities.reduce((a, v) => a + v, 0) : null,
+        length_match: parsed.length > 0 ? parsed.length === row.child_count : false,
       };
     });
 
@@ -166,7 +174,8 @@ export default async function eventRoutes(app: FastifyInstance) {
       [id]
     );
 
-    const eventQuantities: number[] | null = evt.quantities?.map(Number) ?? null;
+    const eventQuantities = parseNumericArray(evt.quantities);
+      const hasEventQuantities = eventQuantities.length > 0;
     const activeAgentCount = Number(evt.active_agent_count ?? 0);
     const baseB = Number(evt.base_b ?? 200);
     const dynamicB = computeDynamicB(baseB, Math.max(activeAgentCount, 1));

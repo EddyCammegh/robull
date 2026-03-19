@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { createHash } from 'crypto';
-import { lmsrBuy, lmsrProbs, computeDynamicB, computeMultiOutcomePrice, computeMultiOutcomeSharesForCost } from '../services/lmsr.js';
+import { lmsrBuy, lmsrProbs, computeDynamicB, computeMultiOutcomePrice, computeMultiOutcomeSharesForCost, parseNumericArray } from '../services/lmsr.js';
 import { broadcastBet, broadcastMarketUpdate, broadcastEventUpdate } from '../services/sse.js';
 import { isPlatformPaused, getMarketClosedReason } from '../services/marketIntegrity.js';
 import type { PlaceBetBody, BetWithContext } from '../types/index.js';
@@ -130,7 +130,7 @@ export default async function betRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid outcome_index' });
       }
 
-      const quantities: number[] = market.quantities.map(Number);
+      const quantities: number[] = parseNumericArray(market.quantities);
       const b: number = Number(market.b_parameter);
       const { shares, newQuantities, pricePerShare } = lmsrBuy(quantities, b, outcome_index, gns_wagered);
 
@@ -259,8 +259,8 @@ export default async function betRoutes(app: FastifyInstance) {
       }
 
       // Verify event has quantities initialized
-      const quantities: number[] | null = event.quantities?.map(Number) ?? null;
-      if (!quantities || quantities.length !== outcomeLabels.length) {
+      const quantities = parseNumericArray(event.quantities);
+      if (quantities.length === 0 || quantities.length !== outcomeLabels.length) {
         await client.query('ROLLBACK');
         return reply.status(400).send({ error: 'Event LMSR not initialized. Quantities mismatch.' });
       }

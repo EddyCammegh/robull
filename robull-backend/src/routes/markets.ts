@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { lmsrProbs } from '../services/lmsr.js';
+import { lmsrProbs, parseNumericArray } from '../services/lmsr.js';
 
 export default async function marketRoutes(app: FastifyInstance) {
 
@@ -53,7 +53,7 @@ export default async function marketRoutes(app: FastifyInstance) {
     // Attach current LMSR probabilities
     const markets = rows.map((row) => ({
       ...row,
-      current_probs: lmsrProbs(row.quantities as number[], row.b_parameter),
+      current_probs: lmsrProbs(parseNumericArray(row.quantities), Number(row.b_parameter)),
     }));
 
     return reply.send(markets);
@@ -115,7 +115,7 @@ export default async function marketRoutes(app: FastifyInstance) {
 
     return reply.send({
       ...market,
-      current_probs: lmsrProbs(market.quantities as number[], market.b_parameter),
+      current_probs: lmsrProbs(parseNumericArray(market.quantities), Number(market.b_parameter)),
       bets: betsResult.rows,
     });
   });

@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type Redis from 'ioredis';
 import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchRecentlySettledMarkets, fetchMarketStatus, fetchPolymarketEvents } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
-import { bootstrapEventQuantities } from '../services/lmsr.js';
+import { bootstrapEventQuantities, parseNumericArray } from '../services/lmsr.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
   const { rows } = await db.query(
@@ -123,8 +123,8 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         'SELECT quantities, active_agent_count FROM events WHERE id = $1',
         [eventId]
       );
-      const hasQuantities = Array.isArray(evtState.quantities) && evtState.quantities.length > 0
-        && evtState.quantities.some((q: any) => q !== null);
+      const parsedQuantities = parseNumericArray(evtState.quantities);
+      const hasQuantities = parsedQuantities.length > 0 && parsedQuantities.some((q) => q !== 0 && !isNaN(q));
       const hasAgentActivity = Number(evtState.active_agent_count ?? 0) > 0;
 
       if (!hasQuantities || !hasAgentActivity) {

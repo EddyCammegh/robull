@@ -14,6 +14,20 @@
 
 const GNS_SCALE = 100;
 
+/**
+ * Parse a PostgreSQL NUMERIC[] column into a JavaScript number[].
+ * Handles: JS array, pg string "{1,2,3}", null/undefined → empty array.
+ */
+export function parseNumericArray(raw: unknown): number[] {
+  if (Array.isArray(raw)) return raw.map(Number);
+  if (typeof raw === 'string') {
+    const trimmed = raw.replace(/[{}]/g, '').trim();
+    if (trimmed === '') return [];
+    return trimmed.split(',').map(Number);
+  }
+  return [];
+}
+
 /** Numerically stable log-sum-exp */
 function logSumExp(qs: number[], b: number): number {
   const scaled = qs.map((q) => q / b);
