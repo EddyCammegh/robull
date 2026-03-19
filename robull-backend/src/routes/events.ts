@@ -83,6 +83,9 @@ export default async function eventRoutes(app: FastifyInstance) {
     const params: unknown[] = [];
     const conditions: string[] = ['1=1'];
 
+    // Only allowed categories
+    conditions.push(`e.category IN ('POLITICS','CRYPTO','MACRO','AI/TECH')`);
+
     if (category) {
       params.push(category);
       conditions.push(`e.category = $${params.length}`);

@@ -34,6 +34,9 @@ export default async function marketRoutes(app: FastifyInstance) {
     // Exclude child markets of grouped events — they are served via /v1/events
     conditions.push('m.event_id IS NULL');
 
+    // Only allowed categories
+    conditions.push(`m.category IN ('POLITICS','CRYPTO','MACRO','AI/TECH')`);
+
     if (category) {
       params.push(category);
       conditions.push(`m.category = $${params.length}`);
