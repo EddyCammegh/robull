@@ -117,17 +117,22 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         childrenSynced++;
       }
 
-      // Initialize event-level LMSR quantities if not yet set
+      // Always (re)initialise event-level LMSR quantities if active_agent_count is 0
+      // (no agents have bet yet, so it's safe to recalculate from Polymarket prices)
       const { rows: [evtState] } = await db.query(
         'SELECT quantities, active_agent_count FROM events WHERE id = $1',
         [eventId]
       );
-      if (!evtState.quantities || evtState.quantities.length === 0) {
+      const hasQuantities = Array.isArray(evtState.quantities) && evtState.quantities.length > 0
+        && evtState.quantities.some((q: any) => q !== null);
+      const hasAgentActivity = Number(evtState.active_agent_count ?? 0) > 0;
+
+      if (!hasQuantities || !hasAgentActivity) {
         // Build probability vector from child markets' Yes prices
         const BASE_B = 200;
         const childProbs = evt.child_markets.map((child) => {
           const yesProb = child.initial_probs[0] ?? 0;
-          return Math.max(yesProb, 0.001); // floor at 0.001 to avoid -Infinity
+          return Math.min(Math.max(yesProb, 0.001), 0.999); // floor 0.001, ceiling 0.999
         });
         const eventQuantities = bootstrapEventQuantities(childProbs, BASE_B);
         await db.query(
