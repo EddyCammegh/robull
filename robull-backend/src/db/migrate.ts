@@ -94,12 +94,13 @@ WHERE event_id IS NOT NULL AND resolved = true AND winning_outcome IS NULL;
 UPDATE events SET quantities = NULL, active_agent_count = 0
 WHERE active_agent_count = 0;
 
--- Remove SPORTS, ENTERTAINMENT, OTHER markets and events from platform
-UPDATE markets SET resolved = true, updated_at = NOW()
-WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER') AND resolved = false;
+-- Remove SPORTS, ENTERTAINMENT, OTHER markets and events permanently
+-- Set winning_outcome = -1 so un-resolve migrations don't resurrect them
+UPDATE markets SET resolved = true, winning_outcome = COALESCE(winning_outcome, -1), updated_at = NOW()
+WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER');
 
 UPDATE events SET resolved = true, updated_at = NOW()
-WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER') AND resolved = false;
+WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER');
 
 -- Remove F1 markets even if categorised under allowed categories
 -- Use word-boundary matching to avoid false positives

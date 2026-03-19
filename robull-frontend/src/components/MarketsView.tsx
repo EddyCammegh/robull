@@ -8,6 +8,7 @@ import { useSSE } from '@/lib/sse';
 import type { Market, RobullEvent, SSEEvent } from '@/types';
 
 const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH'];
+// Only these categories are displayed — SPORTS, ENTERTAINMENT, OTHER excluded
 const ALLOWED_CATEGORIES = new Set(['POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH']);
 const PAGE_SIZE = 50;
 
