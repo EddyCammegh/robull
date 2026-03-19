@@ -157,6 +157,7 @@ export default async function eventRoutes(app: FastifyInstance) {
         outcomes,
         active_outcomes: activeOutcomes,
         bet_count: totalBets,
+        _raw_quantities: evt.quantities, // temporary debug field
       };
     }));
 
@@ -173,6 +174,17 @@ export default async function eventRoutes(app: FastifyInstance) {
     const withProbs = filtered.filter(e => e.outcomes.some((o: any) => o.probability > 0)).length;
     const withoutProbs = filtered.length - withProbs;
     console.log(`[diag:events] Results with probabilities: ${withProbs} | Without: ${withoutProbs}`);
+    if (filtered.length > 0) {
+      const first = filtered[0];
+      console.log(`[diag:events] First event: "${first.title?.slice(0, 50)}"`);
+      console.log(`[diag:events]   outcomes count: ${first.outcomes.length}`);
+      console.log(`[diag:events]   outcomes[0]: ${JSON.stringify(first.outcomes[0])}`);
+      console.log(`[diag:events]   event_type: ${first.event_type}`);
+      console.log(`[diag:events]   active_outcomes: ${first.active_outcomes}`);
+      // Check if quantities are reaching computeOutcomes
+      const evtQ = parseNumericArray(first._raw_quantities);
+      console.log(`[diag:events]   raw_quantities stored: ${evtQ.length > 0 ? evtQ.slice(0, 3).join(',') : 'EMPTY'}`);
+    }
     // ── End diagnostic ──────────────────────────────────────────────────
 
     return reply.send(filtered);
