@@ -99,6 +99,53 @@ export default async function eventRoutes(app: FastifyInstance) {
     return reply.send(result.filter(e => e.outcomes.length >= 2));
   });
 
+  // GET /v1/debug/quantities — temporary debug endpoint
+  app.get('/debug/quantities', async (_req, reply) => {
+    const { rows: sample } = await app.db.query(`
+      SELECT e.id, e.title, e.quantities, e.lmsr_b, e.base_b, e.active_agent_count,
+             array_length(e.quantities, 1) AS qty_len,
+             (SELECT COUNT(*)::int FROM markets m WHERE m.event_id = e.id AND m.resolved = false) AS child_count
+      FROM events e
+      LIMIT 5
+    `);
+
+    const debug = sample.map((row) => {
+      const raw = row.quantities;
+      const parsed = Array.isArray(raw) ? raw.map(Number) : null;
+      const isAllZero = parsed ? parsed.every((v: number) => v === 0) : null;
+      const hasNaN = parsed ? parsed.some((v: number) => isNaN(v)) : null;
+
+      return {
+        id: row.id,
+        title: row.title?.slice(0, 60),
+        quantities_raw: raw,
+        quantities_parsed: parsed,
+        quantities_type: raw === null ? 'null' : typeof raw,
+        quantities_isArray: Array.isArray(raw),
+        qty_len: row.qty_len,
+        child_count: row.child_count,
+        lmsr_b: row.lmsr_b,
+        base_b: row.base_b,
+        active_agent_count: row.active_agent_count,
+        is_all_zero: isAllZero,
+        has_nan: hasNaN,
+        length_match: parsed ? parsed.length === row.child_count : false,
+      };
+    });
+
+    const { rows: [counts] } = await app.db.query(`
+      SELECT
+        COUNT(*)::int AS total_events,
+        COUNT(quantities)::int AS with_quantities,
+        COUNT(CASE WHEN array_length(quantities, 1) > 0 THEN 1 END)::int AS with_nonempty_quantities,
+        (SELECT COUNT(*)::int FROM markets WHERE event_id IS NOT NULL) AS child_markets,
+        (SELECT COUNT(*)::int FROM markets WHERE event_id IS NULL AND resolved = false) AS standalone_markets
+      FROM events
+    `);
+
+    return reply.send({ counts, sample: debug });
+  });
+
   // GET /v1/events/:id — single event with outcomes and bets
   app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
     const { id } = req.params;
