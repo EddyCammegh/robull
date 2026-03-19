@@ -238,10 +238,10 @@ export default async function betRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Event not found or already resolved' });
       }
 
-      // Get child markets to build ordered outcome list
+      // Fetch ALL child markets (including resolved) to match quantities vector indices
       const { rows: children } = await client.query(
-        `SELECT m.id, m.outcome_label, m.initial_probs FROM markets m
-         WHERE m.event_id = $1 AND m.resolved = false
+        `SELECT m.id, m.outcome_label, m.initial_probs, m.resolved, m.closes_at FROM markets m
+         WHERE m.event_id = $1
          ORDER BY m.volume DESC`,
         [eventId]
       );
@@ -258,6 +258,16 @@ export default async function betRoutes(app: FastifyInstance) {
         });
       }
 
+      // Reject bets on resolved/passed outcomes
+      const targetChild = children[outcomeIndex];
+      const isPassed = targetChild.resolved || (targetChild.closes_at && new Date(targetChild.closes_at) < new Date());
+      if (isPassed) {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({
+          error: `Outcome "${outcomeLabels[outcomeIndex]}" has passed — betting is closed for this outcome.`,
+        });
+      }
+
       // Independent threshold events: route to binary LMSR on child market
       if (event.event_type === 'independent') {
         await client.query('ROLLBACK');
@@ -267,9 +277,9 @@ export default async function betRoutes(app: FastifyInstance) {
 
       // Verify event has quantities initialized
       const quantities = parseNumericArray(event.quantities);
-      if (quantities.length === 0 || quantities.length !== outcomeLabels.length) {
+      if (quantities.length === 0) {
         await client.query('ROLLBACK');
-        return reply.status(400).send({ error: 'Event LMSR not initialized. Quantities mismatch.' });
+        return reply.status(400).send({ error: 'Event LMSR not initialized.' });
       }
 
       // Market diversity rule: max 3 bets per outcome per agent per 24hrs

@@ -3,8 +3,10 @@ import { lmsrProbs, computeMultiOutcomePrice, computeDynamicB, parseNumericArray
 
 /**
  * Compute outcome probabilities for a single event.
- * - mutually_exclusive: use event-level multi-outcome LMSR (sums to 1.0)
- * - independent: use each child market's binary LMSR independently (may sum to >1.0)
+ * Uses the full quantities vector from the event table — indices match the
+ * original outcome order at initialisation time. Resolved/passed outcomes
+ * remain in the probability calculation (their probability naturally
+ * approaches 0 or 1).
  */
 function computeOutcomes(evt: any, children: any[]) {
   const eventType = evt.event_type ?? 'mutually_exclusive';
@@ -16,13 +18,19 @@ function computeOutcomes(evt: any, children: any[]) {
   const baseB = Number(evt.base_b ?? 200);
   const dynamicB = computeDynamicB(baseB, Math.max(activeAgentCount, 1));
 
-  // For mutually exclusive events: compute event-level LMSR probabilities
+  // Compute event-level LMSR probabilities from stored quantities vector.
+  // Use quantities.length — NOT children.length — since quantities is the
+  // authoritative source that was set at initialisation.
   let eventProbs: number[] | null = null;
-  if (!isIndependent && hasEventQuantities && eventQuantities.length === children.length) {
-    eventProbs = computeMultiOutcomePrice(eventQuantities, dynamicB);
-  } else if (!isIndependent && hasEventQuantities) {
-    console.warn(`[events] LMSR length mismatch for "${evt.title?.slice(0, 50)}": quantities=${eventQuantities.length}, children=${children.length}`);
+  if (!isIndependent && hasEventQuantities) {
+    try {
+      eventProbs = computeMultiOutcomePrice(eventQuantities, dynamicB);
+    } catch (err) {
+      console.warn(`[events] LMSR computation failed for "${evt.title?.slice(0, 50)}":`, err);
+    }
   }
+
+  const now = new Date();
 
   const outcomes = children.map((child, idx) => {
     const childProbs = lmsrProbs(
@@ -32,11 +40,20 @@ function computeOutcomes(evt: any, children: any[]) {
     const initialProbs = parseNumericArray(child.initial_probs);
     const polymarketProb = initialProbs.length > 0 ? initialProbs[0] : childProbs[0];
 
-    // For independent events: always use child market's own binary LMSR
-    // For mutually exclusive: use event-level LMSR if available
-    const robullProb = isIndependent
-      ? childProbs[0]
-      : (eventProbs ? eventProbs[idx] : childProbs[0]);
+    const childResolved = child.child_resolved === true;
+    const closedAt = child.closes_at ? new Date(child.closes_at) : null;
+    const isPassed = childResolved || (closedAt !== null && closedAt < now);
+
+    // For independent events: use child market's own binary LMSR
+    // For mutually exclusive: use event-level LMSR if available (idx must be in range)
+    let robullProb: number;
+    if (isIndependent) {
+      robullProb = childProbs[0];
+    } else if (eventProbs && idx < eventProbs.length) {
+      robullProb = eventProbs[idx];
+    } else {
+      robullProb = childProbs[0];
+    }
 
     return {
       market_id: child.id,
@@ -46,7 +63,8 @@ function computeOutcomes(evt: any, children: any[]) {
       divergence: robullProb - polymarketProb,
       volume: Number(child.volume),
       closes_at: child.closes_at,
-      resolved: child.child_resolved,
+      active: !isPassed,
+      passed: isPassed,
     };
   });
 
@@ -81,13 +99,16 @@ export default async function eventRoutes(app: FastifyInstance) {
     );
 
     const result = await Promise.all(events.map(async (evt) => {
+      // Fetch ALL child markets — including resolved/passed ones.
+      // Probabilities use the full quantities vector; resolved outcomes
+      // are marked as passed but still included.
       const { rows: children } = await app.db.query(
         `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter,
                 m.initial_probs, m.closes_at, m.resolved AS child_resolved,
                 COUNT(b.id)::int AS bet_count
          FROM markets m
          LEFT JOIN bets b ON b.market_id = m.id
-         WHERE m.event_id = $1 AND m.resolved = false
+         WHERE m.event_id = $1
          GROUP BY m.id
          ORDER BY m.volume DESC`,
         [evt.id]
@@ -95,6 +116,7 @@ export default async function eventRoutes(app: FastifyInstance) {
 
       const { outcomes, activeAgentCount, dynamicB, eventType } = computeOutcomes(evt, children);
       const totalBets = children.reduce((s, c) => s + c.bet_count, 0);
+      const activeOutcomes = outcomes.filter(o => o.active).length;
 
       return {
         id: evt.id,
@@ -111,12 +133,13 @@ export default async function eventRoutes(app: FastifyInstance) {
         active_agent_count: activeAgentCount,
         lmsr_b: dynamicB,
         outcomes,
+        active_outcomes: activeOutcomes,
         bet_count: totalBets,
       };
     }));
 
-    // Only return events that have at least 2 active outcomes
-    return reply.send(result.filter(e => e.outcomes.length >= 2));
+    // Show events that have at least 1 active outcome
+    return reply.send(result.filter(e => e.active_outcomes >= 1));
   });
 
   // GET /v1/debug/quantities — temporary debug endpoint
@@ -124,7 +147,8 @@ export default async function eventRoutes(app: FastifyInstance) {
     const { rows: sample } = await app.db.query(`
       SELECT e.id, e.title, e.quantities, e.lmsr_b, e.base_b, e.active_agent_count, e.event_type,
              array_length(e.quantities, 1) AS qty_len,
-             (SELECT COUNT(*)::int FROM markets m WHERE m.event_id = e.id AND m.resolved = false) AS child_count
+             (SELECT COUNT(*)::int FROM markets m WHERE m.event_id = e.id) AS total_children,
+             (SELECT COUNT(*)::int FROM markets m WHERE m.event_id = e.id AND m.resolved = false) AS active_children
       FROM events e
       LIMIT 5
     `);
@@ -132,10 +156,8 @@ export default async function eventRoutes(app: FastifyInstance) {
     const debug = sample.map((row) => {
       const raw = row.quantities;
       const parsed = parseNumericArray(raw);
-      const isAllZero = parsed.length > 0 ? parsed.every((v: number) => v === 0) : null;
-      const hasNaN = parsed.length > 0 ? parsed.some((v: number) => isNaN(v)) : null;
       let probabilities: number[] | null = null;
-      if (parsed.length > 0 && parsed.length === row.child_count && row.event_type !== 'independent') {
+      if (parsed.length > 0 && row.event_type !== 'independent') {
         try { probabilities = computeMultiOutcomePrice(parsed, Number(row.lmsr_b ?? 200)); } catch {}
       }
 
@@ -143,20 +165,13 @@ export default async function eventRoutes(app: FastifyInstance) {
         id: row.id,
         title: row.title?.slice(0, 60),
         event_type: row.event_type,
-        quantities_raw: raw,
-        quantities_parsed: parsed,
-        quantities_type: raw === null ? 'null' : typeof raw,
-        quantities_isArray: Array.isArray(raw),
-        qty_len: row.qty_len,
-        child_count: row.child_count,
+        quantities_len: parsed.length,
+        total_children: row.total_children,
+        active_children: row.active_children,
         lmsr_b: row.lmsr_b,
-        base_b: row.base_b,
         active_agent_count: row.active_agent_count,
-        is_all_zero: isAllZero,
-        has_nan: hasNaN,
         probabilities,
         prob_sum: probabilities ? probabilities.reduce((a, v) => a + v, 0) : null,
-        length_match: parsed.length > 0 ? parsed.length === row.child_count : false,
       };
     });
 
@@ -168,6 +183,7 @@ export default async function eventRoutes(app: FastifyInstance) {
         COUNT(CASE WHEN event_type = 'independent' THEN 1 END)::int AS independent_events,
         COUNT(CASE WHEN event_type = 'mutually_exclusive' THEN 1 END)::int AS mutually_exclusive_events,
         (SELECT COUNT(*)::int FROM markets WHERE event_id IS NOT NULL) AS child_markets,
+        (SELECT COUNT(*)::int FROM markets WHERE event_id IS NOT NULL AND resolved = false) AS active_child_markets,
         (SELECT COUNT(*)::int FROM markets WHERE event_id IS NULL AND resolved = false) AS standalone_markets
       FROM events
     `);
@@ -187,18 +203,19 @@ export default async function eventRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Event not found' });
     }
 
+    // Fetch ALL child markets (including resolved/passed)
     const { rows: children } = await app.db.query(
       `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter, m.initial_probs,
               m.closes_at, m.resolved AS child_resolved
        FROM markets m
-       WHERE m.event_id = $1 AND m.resolved = false
+       WHERE m.event_id = $1
        ORDER BY m.volume DESC`,
       [id]
     );
 
     const { outcomes, activeAgentCount, dynamicB, eventType } = computeOutcomes(evt, children);
 
-    // Fetch all bets on any child market
+    // Fetch all bets on any child market (including resolved ones for history)
     const childIds = children.map(c => c.id);
     const { rows: bets } = childIds.length > 0 ? await app.db.query(
       `SELECT b.*, a.name AS agent_name, a.country_code, a.org, a.model,
@@ -210,6 +227,8 @@ export default async function eventRoutes(app: FastifyInstance) {
        ORDER BY b.created_at DESC`,
       [childIds]
     ) : { rows: [] };
+
+    const activeOutcomes = outcomes.filter(o => o.active).length;
 
     return reply.send({
       id: evt.id,
@@ -224,6 +243,7 @@ export default async function eventRoutes(app: FastifyInstance) {
       winning_outcome_label: evt.winning_outcome_label,
       event_type: eventType,
       active_agent_count: activeAgentCount,
+      active_outcomes: activeOutcomes,
       lmsr_b: dynamicB,
       outcomes,
       bets,
