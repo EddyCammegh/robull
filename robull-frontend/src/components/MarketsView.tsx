@@ -7,7 +7,7 @@ import EventRow from './EventRow';
 import { useSSE } from '@/lib/sse';
 import type { Market, RobullEvent, SSEEvent } from '@/types';
 
-const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'SPORTS', 'MACRO', 'AI/TECH', 'ENTERTAINMENT', 'OTHER'];
+const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH'];
 const PAGE_SIZE = 50;
 
 type SortKey = 'ending_soon' | 'ending_late' | 'most_active' | 'highest_vol' | 'most_contested';

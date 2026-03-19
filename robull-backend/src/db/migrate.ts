@@ -94,6 +94,20 @@ WHERE event_id IS NOT NULL AND resolved = true AND winning_outcome IS NULL;
 UPDATE events SET quantities = NULL, active_agent_count = 0
 WHERE active_agent_count = 0;
 
+-- Remove SPORTS, ENTERTAINMENT, OTHER markets and events from platform
+UPDATE markets SET resolved = true, updated_at = NOW()
+WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER') AND resolved = false;
+
+UPDATE events SET resolved = true, updated_at = NOW()
+WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER') AND resolved = false;
+
+-- Remove F1 markets even if categorised under allowed categories
+UPDATE markets SET resolved = true, updated_at = NOW()
+WHERE resolved = false AND (question ILIKE '%F1%' OR question ILIKE '%Formula 1%' OR question ILIKE '%Formula One%' OR question ILIKE '%Grand Prix%');
+
+UPDATE events SET resolved = true, updated_at = NOW()
+WHERE resolved = false AND (title ILIKE '%F1%' OR title ILIKE '%Formula 1%' OR title ILIKE '%Formula One%' OR title ILIKE '%Grand Prix%');
+
 -- Event title for sports match context (e.g. "Nashville SC vs. Orlando City SC")
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_title TEXT;
 

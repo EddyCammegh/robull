@@ -320,6 +320,20 @@ const NICHE_FDV_RE = re([
 /**
  * Returns true if the market should be EXCLUDED based on low-quality keyword filters.
  */
+// Categories allowed on Robull
+const ALLOWED_CATEGORIES = new Set(['POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH']);
+
+// F1 exclusion — even if categorised under an allowed category
+const F1_RE = /\b(F1|Formula\s*1|Formula\s*One|Grand\s*Prix)\b/i;
+
+export function isExcludedCategory(category: string): boolean {
+  return !ALLOWED_CATEGORIES.has(category);
+}
+
+export function isF1Market(question: string): boolean {
+  return F1_RE.test(question);
+}
+
 export function isLowQualityMarket(question: string, probs: number[]): boolean {
   // Weather markets
   if (WEATHER_RE.test(question)) return true;
@@ -332,6 +346,9 @@ export function isLowQualityMarket(question: string, probs: number[]): boolean {
 
   // Near 50/50 ambiguous markets — ALL outcomes between 45% and 55%
   if (probs.length >= 2 && probs.every(p => p >= 0.45 && p <= 0.55)) return true;
+
+  // F1 markets excluded regardless of category
+  if (isF1Market(question)) return true;
 
   return false;
 }
@@ -415,6 +432,8 @@ export async function fetchPolymarkets(): Promise<NormalisedMarket[]> {
 
     // Category-aware volume threshold: $50k for CRYPTO/MACRO, $500k for all others
     const category = classifyCategory(m.question, m.tags);
+    if (isExcludedCategory(category)) continue;
+    if (isF1Market(m.question)) continue;
     const minVol = (category === 'CRYPTO' || category === 'MACRO') ? MIN_VOLUME_CRYPTO_MACRO : MIN_VOLUME;
     if (volume < minVol) continue;
 
@@ -498,6 +517,10 @@ export async function fetchPolymarketEvents(): Promise<NormalisedEvent[]> {
 
       const evtVolume = parseFloat(evt.volume ?? '0');
       const category = classifyCategory(evt.title);
+
+      // Category filter: only sync allowed categories
+      if (isExcludedCategory(category)) continue;
+      if (isF1Market(evt.title)) continue;
 
       // Volume filter at event level
       const minVol = (category === 'CRYPTO' || category === 'MACRO') ? MIN_VOLUME_CRYPTO_MACRO : MIN_VOLUME;

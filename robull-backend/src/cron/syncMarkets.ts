@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
-import { fetchPolymarkets, classifyCategory, isLowQualityMarket, fetchRecentlySettledMarkets, fetchMarketStatus, fetchPolymarketEvents } from '../services/polymarket.js';
+import { fetchPolymarkets, classifyCategory, isLowQualityMarket, isExcludedCategory, isF1Market, fetchRecentlySettledMarkets, fetchMarketStatus, fetchPolymarketEvents } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer } from '../services/marketIntegrity.js';
 import { bootstrapEventQuantities, parseNumericArray } from '../services/lmsr.js';
 
@@ -212,7 +212,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const probs: number[] = Array.isArray(row.initial_probs) ? row.initial_probs : [];
       const cat = row.category as string;
       const minVol = (cat === 'CRYPTO' || cat === 'MACRO') ? MIN_VOL_CRYPTO_MACRO : MIN_VOL_DEFAULT;
-      if (vol < minVol || isLowQualityMarket(row.question, probs)) {
+      if (isExcludedCategory(cat) || isF1Market(row.question) || vol < minVol || isLowQualityMarket(row.question, probs)) {
         await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
         cleaned++;
       }
