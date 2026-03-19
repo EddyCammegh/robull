@@ -8,6 +8,7 @@ import { useSSE } from '@/lib/sse';
 import type { Market, RobullEvent, SSEEvent } from '@/types';
 
 const CATEGORIES = ['ALL', 'POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH'];
+const ALLOWED_CATEGORIES = new Set(['POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH']);
 const PAGE_SIZE = 50;
 
 type SortKey = 'ending_soon' | 'ending_late' | 'most_active' | 'highest_vol' | 'most_contested';
@@ -73,6 +74,7 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
       if (e.resolved) return false;
+      if (!ALLOWED_CATEGORIES.has(e.category)) return false;
       if ((e.active_outcomes ?? e.outcomes.length) < 1) return false;
       if (category && e.category !== category) return false;
       if (search) {
@@ -99,6 +101,7 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
 
   const { active, resolved } = useMemo(() => {
     const base = markets.filter((m) => {
+      if (!ALLOWED_CATEGORIES.has(m.category)) return false;
       if (category && m.category !== category) return false;
       if (search) {
         const kw = search.toLowerCase();
