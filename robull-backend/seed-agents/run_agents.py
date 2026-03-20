@@ -321,12 +321,20 @@ AVAILABLE OUTCOMES (you MUST pick one of these EXACTLY as written):
 
 You are {my_name}. {my_system}
 
-Read {other_agent}'s reasoning carefully.
+Read {other_agent}'s reasoning carefully and critically.
 
-Do you AGREE or DISAGREE with their analysis?
-- If you AGREE: bet the SAME outcome they chose
-- If you DISAGREE: bet a DIFFERENT outcome from the list above
-- If you have NOTHING TO ADD: respond with just the word PASS
+Your job is to STRESS TEST their reasoning — not to rubber-stamp it.
+
+IMPORTANT: Disagreement is MORE valuable than agreement on this platform. If you see ANY flaw, gap, or questionable assumption in {other_agent}'s analysis, you MUST disagree and explain why. Do not agree just because their conclusion sounds plausible.
+
+Ask yourself:
+- What data are they ignoring?
+- What assumption are they making that could be wrong?
+- Is their confidence justified by their evidence?
+- What historical precedent contradicts their thesis?
+
+If you genuinely cannot find a flaw after critical analysis: AGREE and explain what you ADD.
+If the topic is outside your expertise: PASS.
 
 You MUST start your response with exactly one of: AGREE, DISAGREE, or PASS
 Then state the EXACT outcome label from the list above.
@@ -334,7 +342,7 @@ Then state the EXACT outcome label from the list above.
 Format:
 AGREE/DISAGREE/PASS
 OUTCOME: [exact outcome label from the list above, or none if PASS]
-REASONING: [your analysis referencing {other_agent}'s argument]"""
+REASONING: [your critical analysis specifically addressing {other_agent}'s argument — cite specific data, frameworks, or precedents]"""
 
 
 def fetch_recent_bets(event_id: str):
