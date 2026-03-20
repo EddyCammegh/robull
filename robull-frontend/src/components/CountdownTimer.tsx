@@ -32,11 +32,12 @@ function formatCountdown(ms: number): { text: string; urgency: Urgency } {
 interface CountdownTimerProps {
   closesAt: string | null | undefined;
   resolved?: boolean;
+  activeOutcomes?: number;
   size?: 'sm' | 'md';
   className?: string;
 }
 
-export default function CountdownTimer({ closesAt, resolved, size = 'sm', className }: CountdownTimerProps) {
+export default function CountdownTimer({ closesAt, resolved, activeOutcomes, size = 'sm', className }: CountdownTimerProps) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -58,12 +59,20 @@ export default function CountdownTimer({ closesAt, resolved, size = 'sm', classN
 
   const ms = new Date(closesAt).getTime() - now;
 
-  // If the market is not resolved, never show CLOSED based on closes_at alone.
-  // The database resolved field is the source of truth, not client-side time.
+  // If not resolved but closes_at has passed, show contextual label
   if (ms <= 0 && !resolved) {
+    // Event with active outcomes remaining
+    if (activeOutcomes != null && activeOutcomes > 0) {
+      return (
+        <span className={clsx('font-mono font-bold text-gray-300', textSize, className)}>
+          {activeOutcomes} OUTCOME{activeOutcomes !== 1 ? 'S' : ''} OPEN
+        </span>
+      );
+    }
+    // Standalone market awaiting Polymarket resolution
     return (
       <span className={clsx('font-mono font-bold text-amber-400', textSize, className)}>
-        ENDING
+        RESOLVING
       </span>
     );
   }

@@ -72,7 +72,7 @@ export default function EventRow({ event }: { event: RobullEvent }) {
                 {event.bet_count} bets
               </span>
             )}
-            <CountdownTimer closesAt={event.closes_at} resolved={event.resolved} className="hidden sm:block" />
+            <CountdownTimer closesAt={event.closes_at} resolved={event.resolved} activeOutcomes={event.active_outcomes} className="hidden sm:block" />
             <span className="font-mono text-xs text-muted hidden sm:block">
               ${(event.volume / 1000).toFixed(0)}K vol
             </span>
