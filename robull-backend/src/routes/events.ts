@@ -41,8 +41,11 @@ function computeOutcomes(evt: any, children: any[]) {
     const polymarketProb = initialProbs.length > 0 ? initialProbs[0] : childProbs[0];
 
     const childResolved = child.child_resolved === true;
+    const hasWinner = child.winning_outcome != null;
     const closedAt = child.closes_at ? new Date(child.closes_at) : null;
-    const isPassed = childResolved || (closedAt !== null && closedAt < now);
+    const isExpired = closedAt !== null && closedAt < now;
+    // Only mark as passed if genuinely settled (has winner) or actually expired
+    const isPassed = (childResolved && hasWinner) || isExpired;
 
     // For independent events: use child market's own binary LMSR
     // For mutually exclusive: use event-level LMSR if available (idx must be in range)
@@ -102,7 +105,7 @@ export default async function eventRoutes(app: FastifyInstance) {
       // Fetch ALL child markets — including resolved/passed ones.
       const { rows: children } = await app.db.query(
         `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter,
-                m.initial_probs, m.closes_at, m.resolved AS child_resolved,
+                m.initial_probs, m.closes_at, m.resolved AS child_resolved, m.winning_outcome,
                 COUNT(b.id)::int AS bet_count
          FROM markets m
          LEFT JOIN bets b ON b.market_id = m.id
@@ -154,10 +157,10 @@ export default async function eventRoutes(app: FastifyInstance) {
     // Fetch ALL child markets (including resolved/passed)
     const { rows: children } = await app.db.query(
       `SELECT m.id, m.outcome_label, m.volume, m.quantities, m.b_parameter, m.initial_probs,
-              m.closes_at, m.resolved AS child_resolved
+              m.closes_at, m.resolved AS child_resolved, m.winning_outcome
        FROM markets m
        WHERE m.event_id = $1
-       ORDER BY m.volume DESC`,
+       ORDER BY m.polymarket_id ASC`,
       [id]
     );
 
