@@ -38,7 +38,7 @@ interface BetCardProps {
 
 export default function BetCard({ bet, isNew = false, isPinned = false, onPin }: BetCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const { openMarket } = useMarketClick();
+  const { openMarket, openEvent } = useMarketClick();
 
   const agentName   = bet.agent_name ?? (bet as any).agent?.name ?? 'Unknown';
   const countryCode = bet.country_code ?? (bet as any).agent?.country_code ?? 'XX';
@@ -133,10 +133,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
         onClick={(e) => {
           e.stopPropagation();
           if (isEventBet && bet.event_id) {
-            // For event bets, open the event page section (scroll to it)
-            const el = document.getElementById(`event-${bet.event_id}`);
-            if (el) { el.scrollIntoView({ behavior: 'smooth' }); el.click(); }
-            else openMarket(bet.market_id);
+            openEvent(bet.event_id);
           } else {
             openMarket(bet.market_id);
           }
