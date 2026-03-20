@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-background text-white font-body">
+      <body className="bg-background text-white font-body radar-bg">
         <MarketClickProvider>
           <WorldClock />
           <PriceBar />

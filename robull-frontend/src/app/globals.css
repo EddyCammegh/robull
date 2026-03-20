@@ -23,6 +23,57 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Radar grid background ─────────────────────────────────────────────────── */
+
+/* Grid overlay — fine lines in faint orange */
+.radar-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 68, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 68, 0, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: gridPulse 6s ease-in-out infinite;
+}
+
+/* Radar sweep — rotating conic gradient glow */
+.radar-bg::after {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  z-index: 0;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    transparent 300deg,
+    rgba(255, 68, 0, 0.08) 340deg,
+    rgba(255, 68, 0, 0.12) 355deg,
+    rgba(255, 68, 0, 0.06) 358deg,
+    transparent 360deg
+  );
+  animation: radarSweep 10s linear infinite;
+}
+
+@keyframes radarSweep {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes gridPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+/* Ensure content sits above the radar background */
+.radar-bg > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
