@@ -57,6 +57,17 @@ export default function CountdownTimer({ closesAt, resolved, size = 'sm', classN
   if (!closesAt) return null;
 
   const ms = new Date(closesAt).getTime() - now;
+
+  // If the market is not resolved, never show CLOSED based on closes_at alone.
+  // The database resolved field is the source of truth, not client-side time.
+  if (ms <= 0 && !resolved) {
+    return (
+      <span className={clsx('font-mono font-bold text-amber-400', textSize, className)}>
+        ENDING
+      </span>
+    );
+  }
+
   const { text, urgency } = formatCountdown(ms);
 
   if (urgency === 'closing') {
