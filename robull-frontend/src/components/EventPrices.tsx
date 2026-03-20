@@ -20,7 +20,7 @@ export default function EventPrices() {
   if (!prices) return null;
 
   return (
-    <div className="mb-4 rounded border border-border bg-surface/30 px-3 py-2">
+    <div className="mb-4 rounded border border-border bg-[#161616] px-3 py-2">
       <div className="flex items-center gap-1 mb-1.5">
         <span className="font-mono text-[9px] text-muted uppercase tracking-widest">Live Prices</span>
       </div>

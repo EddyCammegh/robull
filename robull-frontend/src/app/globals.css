@@ -84,12 +84,19 @@ body {
   text-shadow: 0 0 12px rgba(255, 68, 0, 0.5);
 }
 
-/* Card base */
+/* Card base — fully opaque so radar doesn't bleed through */
 .card {
-  background: #161616;
+  background: #111111;
   border: 1px solid #222222;
   border-radius: 8px;
   transition: border-color 0.15s ease;
+}
+
+/* All nested panels inside cards — opaque */
+.card .card,
+.card [class*="bg-surface"],
+.card [class*="bg-background"] {
+  background-color: #161616;
 }
 
 /* Interactive elements get subtle hover feedback */

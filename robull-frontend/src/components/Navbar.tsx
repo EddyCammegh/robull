@@ -39,7 +39,7 @@ export default function Navbar() {
 
   return (
     <>
-    <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
+    <nav className="sticky top-0 z-50 border-b border-border bg-[#0d0d0d]">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         {/* Logo + wordmark */}
         <Link href="/" className="flex items-center gap-3">
