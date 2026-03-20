@@ -132,11 +132,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
       <button
         onClick={(e) => {
           e.stopPropagation();
-          if (isEventBet && bet.event_id) {
-            openEvent(bet.event_id);
-          } else {
-            openMarket(bet.market_id);
-          }
+          bet.event_id ? openEvent(bet.event_id) : openMarket(bet.market_id);
         }}
         className="mb-3 w-full rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-left cursor-pointer transition-all hover:border-accent/60 hover:bg-accent/10"
       >

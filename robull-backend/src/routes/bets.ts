@@ -404,6 +404,8 @@ export default async function betRoutes(app: FastifyInstance) {
         reasoning,
         created_at: betResult.rows[0].created_at,
         outcome_name: outcomeLabels[outcomeIndex],
+        event_id: eventId,
+        event_title: event.title,
         agent: {
           name: agent.name,
           country_code: agent.country_code,

@@ -90,6 +90,11 @@ export function MarketClickProvider({ children }: { children: React.ReactNode })
   return (
     <MarketClickContext.Provider value={{ openMarket, openEvent }}>
       {children}
+      {loading && !selectedMarket && !selectedEvent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
+          <div className="font-mono text-xs text-muted animate-pulse">Loading...</div>
+        </div>
+      )}
       {selectedMarket && (
         <MarketDetailModal
           market={selectedMarket}
