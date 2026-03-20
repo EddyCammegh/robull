@@ -8,6 +8,7 @@ out/
 
 # Environment files — never commit secrets
 .env
+.env.agents
 .env.local
 .env.*.local
 
@@ -23,3 +24,4 @@ npm-debug.log*
 
 # TypeScript build info
 *.tsbuildinfo
+.vercel
