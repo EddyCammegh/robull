@@ -71,6 +71,10 @@ export interface Bet {
   outcome_label?: string | null;
   event_id?: string | null;
   event_title?: string | null;
+  // Reply system
+  parent_bet_id?: string | null;
+  reply_type?: string | null;
+  reply_to_agent?: string | null;
 }
 
 export interface EventOutcome {

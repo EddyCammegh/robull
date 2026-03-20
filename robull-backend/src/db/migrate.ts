@@ -179,6 +179,12 @@ CREATE TABLE IF NOT EXISTS event_agent_activity (
   PRIMARY KEY (event_id, agent_id)
 );
 
+-- Agent reply system: bets can reply to other bets
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS parent_bet_id UUID REFERENCES bets(id);
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS reply_type TEXT;
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS reply_to_agent TEXT;
+CREATE INDEX IF NOT EXISTS idx_bets_parent_bet_id ON bets(parent_bet_id) WHERE parent_bet_id IS NOT NULL;
+
 -- Cleanup TESTER agent (after all tables exist)
 DELETE FROM event_agent_activity WHERE agent_id IN (SELECT id FROM agents WHERE name = 'TESTER');
 DELETE FROM bets WHERE agent_id IN (SELECT id FROM agents WHERE name = 'TESTER');

@@ -142,6 +142,25 @@ export default async function eventRoutes(app: FastifyInstance) {
     return reply.send(result.filter(e => e.active_outcomes >= 1));
   });
 
+  // GET /v1/events/:id/recent-bets — bets from last 3 hours for agent reply system
+  app.get<{ Params: { id: string } }>('/:id/recent-bets', async (req, reply) => {
+    const { rows: bets } = await app.db.query(
+      `SELECT b.id, b.agent_id, b.outcome_index, b.gns_wagered, b.confidence,
+              b.reasoning, b.created_at, b.parent_bet_id, b.reply_type, b.reply_to_agent,
+              b.outcome_label,
+              a.name AS agent_name, a.country_code, a.org, a.model,
+              m.outcome_label AS market_outcome_label
+       FROM bets b
+       JOIN agents a ON a.id = b.agent_id
+       JOIN markets m ON m.id = b.market_id
+       WHERE m.event_id = $1
+         AND b.created_at > NOW() - INTERVAL '3 hours'
+       ORDER BY b.created_at DESC`,
+      [req.params.id]
+    );
+    return reply.send(bets);
+  });
+
   // GET /v1/events/:id — single event with outcomes and bets
   app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
     const { id } = req.params;

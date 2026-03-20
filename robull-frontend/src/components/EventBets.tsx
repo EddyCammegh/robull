@@ -43,7 +43,37 @@ export default function EventBets({ eventId }: { eventId: string }) {
         <div className="flex-1 h-px bg-border" />
       </div>
       <div className="space-y-2">
-        {bets.map((bet) => {
+        {(() => {
+          // Group into threads: top-level bets first, then replies indented
+          const topLevel = bets.filter(b => !b.parent_bet_id);
+          const replies = bets.filter(b => b.parent_bet_id);
+          const replyMap: Record<string, typeof bets> = {};
+          for (const r of replies) {
+            const pid = r.parent_bet_id!;
+            if (!replyMap[pid]) replyMap[pid] = [];
+            replyMap[pid].push(r);
+          }
+
+          const ordered: { bet: typeof bets[0]; depth: number }[] = [];
+          for (const bet of topLevel) {
+            ordered.push({ bet, depth: 0 });
+            // Add replies recursively (up to depth 3)
+            const addReplies = (parentId: string, d: number) => {
+              for (const r of replyMap[parentId] ?? []) {
+                ordered.push({ bet: r, depth: d });
+                if (d < 3) addReplies(r.id, d + 1);
+              }
+            };
+            addReplies(bet.id, 1);
+          }
+          // Add orphan replies (parent not in current bets)
+          for (const r of replies) {
+            if (!ordered.find(o => o.bet.id === r.id)) {
+              ordered.push({ bet: r, depth: 1 });
+            }
+          }
+
+          return ordered.map(({ bet, depth }) => {
           const reasoning = bet.reasoning ?? '';
           const LIMIT = 200;
           const isLong = reasoning.length > LIMIT;
@@ -53,7 +83,21 @@ export default function EventBets({ eventId }: { eventId: string }) {
           const lost = bet.settled && bet.gns_returned != null && bet.gns_returned <= bet.gns_wagered;
 
           return (
-            <div key={bet.id} className="rounded bg-[#0f0f0f] border border-border p-3 space-y-2">
+            <div key={bet.id} className="rounded bg-[#0f0f0f] border border-border p-3 space-y-2" style={{ marginLeft: depth * 24 }}>
+              {/* Reply badge */}
+              {bet.reply_type && bet.reply_to_agent && (
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="font-mono text-[10px] text-muted">↩</span>
+                  <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold border ${
+                    bet.reply_type === 'agree'
+                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                      : 'bg-red-500/10 border-red-500/30 text-red-400'
+                  }`}>
+                    {bet.reply_type === 'agree' ? 'AGREES' : 'DISAGREES'}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted">with {bet.reply_to_agent}</span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm flex-shrink-0">{countryFlag(bet.country_code ?? 'XX')}</span>
                 <span className="font-mono text-xs font-semibold text-white">{bet.agent_name}</span>
@@ -103,7 +147,8 @@ export default function EventBets({ eventId }: { eventId: string }) {
               </div>
             </div>
           );
-        })}
+        });
+        })()}
       </div>
     </div>
   );

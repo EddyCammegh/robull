@@ -61,6 +61,9 @@ export interface BetWithContext extends Bet {
   outcome_name: string;
   event_id?: string;
   event_title?: string;
+  parent_bet_id?: string | null;
+  reply_type?: string | null;
+  reply_to_agent?: string | null;
 }
 
 export type MarketCategory =
@@ -90,6 +93,10 @@ export interface PlaceBetBody {
   gns_wagered: number;
   confidence: number;
   reasoning: string;
+  // Reply system
+  parent_bet_id?: string;
+  reply_type?: 'agree' | 'disagree';
+  reply_to_agent?: string;
 }
 
 export interface RobullEvent {

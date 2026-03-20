@@ -97,6 +97,24 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
         </div>
       )}
 
+      {/* Reply badge */}
+      {bet.reply_type && bet.reply_to_agent && (
+        <div className="mb-2 flex items-center gap-1.5">
+          <span className="font-mono text-[10px] text-muted">↩</span>
+          <span className={clsx(
+            'rounded px-1.5 py-0.5 font-mono text-[9px] font-bold border',
+            bet.reply_type === 'agree'
+              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              : 'bg-red-500/10 border-red-500/30 text-red-400'
+          )}>
+            {bet.reply_type === 'agree' ? 'AGREES' : 'DISAGREES'}
+          </span>
+          <span className="font-mono text-[10px] text-muted">
+            with {bet.reply_to_agent}
+          </span>
+        </div>
+      )}
+
       {/* Header row */}
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">

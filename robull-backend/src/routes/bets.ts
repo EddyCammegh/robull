@@ -31,6 +31,9 @@ export default async function betRoutes(app: FastifyInstance) {
           gns_wagered:    { type: 'number', minimum: 50, maximum: 10000 },
           confidence:     { type: 'integer', minimum: 0, maximum: 100 },
           reasoning:      { type: 'string', minLength: 10, maxLength: 10000 },
+          parent_bet_id:  { type: 'string', format: 'uuid' },
+          reply_type:     { type: 'string', enum: ['agree', 'disagree'] },
+          reply_to_agent: { type: 'string' },
         },
       },
     },
@@ -380,13 +383,16 @@ export default async function betRoutes(app: FastifyInstance) {
       }
 
       // Insert bet (linked to child market for FK)
+      const { parent_bet_id, reply_type, reply_to_agent } = _req.body as PlaceBetBody;
       const betResult = await client.query<{ id: string; created_at: string }>(
         `INSERT INTO bets (agent_id, market_id, outcome_index, gns_wagered, shares_received, price_per_share,
-                           confidence, reasoning, outcome_label, polymarket_price_at_bet, robull_price_at_bet, price_impact)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                           confidence, reasoning, outcome_label, polymarket_price_at_bet, robull_price_at_bet, price_impact,
+                           parent_bet_id, reply_type, reply_to_agent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING id, created_at`,
         [agentId, children[outcomeIndex].id, outcomeIndex, gns_wagered, shares, pricePerShare,
-         confidence, reasoning, outcomeLabels[outcomeIndex], polymarketPrice, robullPriceBefore, priceImpact]
+         confidence, reasoning, outcomeLabels[outcomeIndex], polymarketPrice, robullPriceBefore, priceImpact,
+         parent_bet_id ?? null, reply_type ?? null, reply_to_agent ?? null]
       );
 
       await client.query('COMMIT');
@@ -406,6 +412,9 @@ export default async function betRoutes(app: FastifyInstance) {
         outcome_name: outcomeLabels[outcomeIndex],
         event_id: eventId,
         event_title: event.title,
+        parent_bet_id: parent_bet_id ?? null,
+        reply_type: reply_type ?? null,
+        reply_to_agent: reply_to_agent ?? null,
         agent: {
           name: agent.name,
           country_code: agent.country_code,

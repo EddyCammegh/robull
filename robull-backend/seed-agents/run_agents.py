@@ -306,6 +306,227 @@ def _record_bet(name: str):
     _last_bet[name] = (time.time(), random.uniform(COOLDOWN_MIN, COOLDOWN_MAX))
 
 
+# ── Reply system ──────────────────────────────────────────────────────────
+
+REPLY_COOLDOWN = 4 * 60 * 60  # 4 hours per agent per event
+_reply_log: dict[str, float] = {}  # "agent_name:event_id" → timestamp
+
+REPLY_PROMPT = """\
+{other_agent} just placed this bet on "{event_title}":
+Outcome: {outcome_label}
+Reasoning: {other_reasoning}
+
+You are {my_name}. {my_system}
+
+Read {other_agent}'s reasoning carefully.
+
+Do you AGREE or DISAGREE with their analysis?
+- If you AGREE: bet the same outcome and explain what you ADD to their analysis
+- If you DISAGREE: bet a DIFFERENT outcome and specifically address why their reasoning is flawed
+- If you have NOTHING TO ADD: respond with just the word PASS
+
+You MUST start your response with exactly one of: AGREE, DISAGREE, or PASS
+Then if AGREE or DISAGREE, state which outcome you are betting on and your reasoning.
+
+Format:
+AGREE/DISAGREE/PASS
+OUTCOME: [outcome label or none]
+REASONING: [your structured analysis referencing {other_agent}'s argument]"""
+
+
+def fetch_recent_bets(event_id: str):
+    try:
+        resp = requests.get(f"{API}/v1/events/{event_id}/recent-bets", timeout=10)
+        if resp.ok:
+            return resp.json()
+    except:
+        pass
+    return []
+
+
+def parse_reply(text: str):
+    """Parse agent reply into decision, outcome, reasoning."""
+    lines = text.strip().split('\n')
+    if not lines:
+        return 'pass', None, ''
+
+    first = lines[0].strip().upper()
+    if first.startswith('PASS'):
+        return 'pass', None, ''
+
+    decision = 'agree' if first.startswith('AGREE') else 'disagree' if first.startswith('DISAGREE') else 'pass'
+    if decision == 'pass':
+        return 'pass', None, ''
+
+    outcome = None
+    reasoning_lines = []
+    for line in lines[1:]:
+        if line.strip().upper().startswith('OUTCOME:'):
+            outcome = line.split(':', 1)[1].strip()
+        elif line.strip().upper().startswith('REASONING:'):
+            reasoning_lines.append(line.split(':', 1)[1].strip())
+        else:
+            reasoning_lines.append(line)
+
+    reasoning = '\n'.join(reasoning_lines).strip()
+    if not reasoning:
+        reasoning = text  # fallback: use full response as reasoning
+
+    return decision, outcome, reasoning
+
+
+def get_reply_chain_depth(bet_id: str, bets: list) -> int:
+    """Count how deep in a reply chain a bet is."""
+    by_id = {b['id']: b for b in bets}
+    depth = 0
+    current = bet_id
+    while current and depth < 10:
+        bet = by_id.get(current)
+        if not bet or not bet.get('parent_bet_id'):
+            break
+        current = bet['parent_bet_id']
+        depth += 1
+    return depth
+
+
+def run_reply_cycle(events):
+    """Check recent bets and generate agent replies."""
+    # Pick 1-2 random events to check for replies
+    eligible = [e for e in events if e.get('category') in ('POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH')]
+    if not eligible:
+        return
+
+    check_events = random.sample(eligible, min(2, len(eligible)))
+
+    for evt in check_events:
+        event_id = evt['id']
+        event_title = evt.get('title', '')
+        event_category = evt.get('category', '')
+
+        recent = fetch_recent_bets(event_id)
+        if not recent:
+            continue
+
+        # Find agents who might want to reply
+        for agent in AGENTS:
+            name = agent['name']
+            if event_category not in agent['categories']:
+                continue
+
+            # Cooldown check
+            reply_key = f"{name}:{event_id}"
+            if reply_key in _reply_log and (time.time() - _reply_log[reply_key]) < REPLY_COOLDOWN:
+                continue
+
+            # Balance check
+            balance = get_balance(name)
+            if balance < MIN_BALANCE:
+                continue
+
+            # On regular cooldown?
+            if _is_on_cooldown(name):
+                continue
+
+            # Find a bet from ANOTHER agent to reply to
+            target_bet = None
+            for bet in recent:
+                if bet.get('agent_name') == name:
+                    continue
+                # Don't reply to chains deeper than 3
+                if get_reply_chain_depth(bet['id'], recent) >= 3:
+                    continue
+                # Prefer bets without many replies already
+                replies_to_this = [b for b in recent if b.get('parent_bet_id') == bet['id']]
+                if len(replies_to_this) >= 2:
+                    continue
+                target_bet = bet
+                break
+
+            if not target_bet:
+                continue
+
+            # Generate reply
+            other_agent = target_bet.get('agent_name', 'Unknown')
+            other_reasoning = target_bet.get('reasoning', '')[:500]
+            outcome_label = target_bet.get('outcome_label') or target_bet.get('market_outcome_label', '')
+
+            prompt = REPLY_PROMPT.format(
+                other_agent=other_agent,
+                event_title=event_title,
+                outcome_label=outcome_label,
+                other_reasoning=other_reasoning,
+                my_name=name,
+                my_system=agent['system'][:200],
+            )
+
+            # Get AI response
+            provider = agent.get('provider', 'anthropic')
+            model = agent.get('model', 'claude-sonnet-4')
+            try:
+                if provider == 'openai' and openai_client:
+                    resp = openai_client.chat.completions.create(
+                        model=model, max_tokens=400,
+                        messages=[{"role": "system", "content": agent["system"]}, {"role": "user", "content": prompt}],
+                    )
+                    reply_text = resp.choices[0].message.content.strip()
+                elif claude_client:
+                    claude_model = "claude-sonnet-4-20250514" if provider == "openai" else (model if "haiku" in model else "claude-sonnet-4-20250514")
+                    resp = claude_client.messages.create(
+                        model=claude_model, max_tokens=400,
+                        system=agent["system"],
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    reply_text = resp.content[0].text.strip()
+                else:
+                    continue
+            except Exception as e:
+                print(f"  [{name}] Reply AI error: {e}")
+                continue
+
+            decision, reply_outcome, reasoning = parse_reply(reply_text)
+
+            if decision == 'pass':
+                print(f"  [{name}] PASS on replying to {other_agent} re: {event_title[:40]}")
+                _reply_log[reply_key] = time.time()
+                continue
+
+            if not reply_outcome:
+                continue
+
+            # Place the reply bet
+            wager = random.randint(agent['min_wager'], agent['max_wager'])
+            wager = max(100, (wager // 50) * 50)
+            confidence = random.randint(55, 85)
+
+            payload = {
+                "event_id": event_id,
+                "outcome_label": reply_outcome,
+                "gns_wagered": wager,
+                "confidence": confidence,
+                "reasoning": reasoning,
+                "parent_bet_id": target_bet['id'],
+                "reply_type": decision,
+                "reply_to_agent": other_agent,
+            }
+
+            try:
+                resp = requests.post(
+                    f"{API}/v1/bets", json=payload,
+                    headers={"Authorization": f"Bearer {agent['key']}"}, timeout=15,
+                )
+                if resp.status_code == 201:
+                    badge = "AGREES" if decision == "agree" else "DISAGREES"
+                    print(f"  [{name}] {badge} with {other_agent} on '{reply_outcome}' — {event_title[:50]}")
+                    _record_bet(name)
+                    _reply_log[reply_key] = time.time()
+                else:
+                    print(f"  [{name}] Reply rejected: {resp.status_code} {resp.text[:80]}")
+            except Exception as e:
+                print(f"  [{name}] Reply failed: {e}")
+
+            break  # One reply per agent per cycle
+
+
 # ── Main loop ──────────────────────────────────────────────────────────────
 
 def run_cycle(opportunities):
@@ -361,6 +582,11 @@ def main():
                 run_cycle(opportunities)
             else:
                 print("  No opportunities available.")
+
+            # Reply cycle: check for recent bets to reply to
+            if events and cycle % 3 == 0:  # Run reply check every 3rd cycle
+                print("  --- Reply check ---")
+                run_reply_cycle(events)
         except Exception as e:
             print(f"  [!] Cycle failed: {e}")
 
