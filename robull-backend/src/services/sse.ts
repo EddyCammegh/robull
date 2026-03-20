@@ -72,6 +72,27 @@ export function broadcastMarketClosed(marketId: string): void {
   dead.forEach((c) => clients.delete(c));
 }
 
+export function broadcastMarketResolved(data: {
+  market_title: string;
+  winning_outcome: string;
+  total_winners: number;
+  total_losers: number;
+  top_payouts: { agent_name: string; country_code: string; gns_won: number }[];
+}): void {
+  const payload = `data: ${JSON.stringify({ type: 'market_resolved', ...data })}\n\n`;
+  const dead: FastifyReply[] = [];
+
+  for (const client of clients) {
+    try {
+      (client.raw as any).write(payload);
+    } catch {
+      dead.push(client);
+    }
+  }
+
+  dead.forEach((c) => clients.delete(c));
+}
+
 export function clientCount(): number {
   return clients.size;
 }

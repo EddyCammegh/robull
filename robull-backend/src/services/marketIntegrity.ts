@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
 import { broadcastMarketClosed } from './sse.js';
+import { processMarketPayouts } from './payouts.js';
 
 // ─── Redis key conventions ─────────────────────────────────────────────────────
 const MARKET_STATUS_KEY  = (id: string) => `market:status:${id}`;
@@ -110,6 +111,11 @@ export async function closeMarketEverywhere(redis: Redis, db: Pool, marketId: st
   }
   await setMarketStatus(redis, marketId, 'closed');
   broadcastMarketClosed(marketId);
+
+  // Process payouts if we have a winning outcome
+  if (winningOutcome != null) {
+    await processMarketPayouts(db, marketId, winningOutcome);
+  }
 
   // If this is a child market, check if the parent event should resolve
   if (market?.event_id) {

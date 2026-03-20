@@ -3,6 +3,7 @@ import type Redis from 'ioredis';
 import { fetchPolymarkets, classifyCategory, isLowQualityMarket, isExcludedCategory, isF1Market, fetchRecentlySettledMarkets, fetchMarketStatus, fetchPolymarketEvents } from '../services/polymarket.js';
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer, checkEventResolution } from '../services/marketIntegrity.js';
 import { bootstrapEventQuantities, parseNumericArray } from '../services/lmsr.js';
+import { processMarketPayouts } from '../services/payouts.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
   const { rows } = await db.query(
@@ -261,6 +262,8 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
           );
           console.log(`[backfill:bulk] winning_outcome=${winner} for "${m.question?.slice(0, 60)}"`);
           totalFilled++;
+          // Process payouts for this market
+          await processMarketPayouts(db, m.id, winner);
           // If this is a child market, check if parent event should resolve
           if (m.event_id) {
             await checkEventResolution(db, m.event_id);
@@ -286,6 +289,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
           );
           console.log(`[backfill:per-market] winning_outcome=${status.winningOutcome} for "${m.question?.slice(0, 60)}"`);
           totalFilled++;
+          await processMarketPayouts(db, m.id, status.winningOutcome);
           if (m.event_id) {
             await checkEventResolution(db, m.event_id);
           }
