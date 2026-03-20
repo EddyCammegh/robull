@@ -50,7 +50,7 @@ export default function PolymarketButton({ url, question, size = 'sm', className
       `}
     >
       <PolymarketLogo />
-      <span>Bet on Polymarket</span>
+      <span>View on Polymarket</span>
     </a>
   );
 }
