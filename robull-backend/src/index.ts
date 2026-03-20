@@ -37,9 +37,8 @@ async function start() {
   });
 
   await app.register(rateLimit, {
-    max: 60,
+    max: 120,
     timeWindow: '1 minute',
-    // Tighter limit for bet placement
     keyGenerator: (req) => req.headers.authorization ?? req.ip,
   });
 

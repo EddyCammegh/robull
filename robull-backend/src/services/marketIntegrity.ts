@@ -79,9 +79,15 @@ export async function recordApiSuccess(redis: Redis): Promise<void> {
 
 export async function recordApiFailure(redis: Redis): Promise<void> {
   const lastSuccess = await redis.get(API_LAST_SUCCESS);
-  const lastSuccessTime = lastSuccess ? Number(lastSuccess) : 0;
   const now = Math.floor(Date.now() / 1000);
 
+  // If no last success recorded, assume API was recently working (don't trip on cold start)
+  if (!lastSuccess) {
+    await redis.set(API_LAST_SUCCESS, String(now - 60));
+    return;
+  }
+
+  const lastSuccessTime = Number(lastSuccess);
   if (now - lastSuccessTime >= API_OUTAGE_THRESHOLD) {
     await redis.set(CIRCUIT_BREAKER, 'paused', 'EX', CIRCUIT_BREAKER_TTL);
     console.error(`[circuit-breaker] Platform paused — Polymarket API unreachable for ${now - lastSuccessTime}s`);
