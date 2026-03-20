@@ -72,6 +72,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     const events = await fetchPolymarketEvents();
     let eventsSynced = 0;
     let childrenSynced = 0;
+    let eventsReinitialized = 0;
     for (const evt of events) {
       // Upsert event row
       const { rows: [evtRow] } = await db.query(
@@ -133,18 +134,24 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const hasPropMarkets = labels.some((l) => PROP_PATTERNS.test(l));
       const isMixedSportsProps = hasPropMarkets && labels.length > 8;
 
+      // Detect date-based sequential/cumulative events ("by March", "by June", "by December")
+      const DATE_PATTERNS = /\b(by\s+(January|February|March|April|May|June|July|August|September|October|November|December|Q[1-4]|20\d{2})|\d{4}$)/i;
+      const hasDateLabels = labels.some((l) => DATE_PATTERNS.test(l));
+
       let eventType: string;
       if (isMixedSportsProps) {
-        // Mixed sports props: treat each child as standalone binary, not a grouped event
         eventType = 'sports_props';
-      } else if (probSum > 1.1) {
+      } else if (hasDateLabels) {
+        // Date-based sequential events: cumulative thresholds, not mutually exclusive
+        eventType = 'independent';
+      } else if (probSum > 1.1 || probSum < 0.5) {
+        // Probs far from 1.0 in either direction → independent outcomes
         eventType = 'independent';
       } else {
         eventType = 'mutually_exclusive';
       }
 
       // Re-initialise event LMSR from current Polymarket prices when no agents have bet.
-      // Once agents bet (active_agent_count > 0), preserve agent-driven price discovery.
       const { rows: [evtState] } = await db.query(
         'SELECT active_agent_count FROM events WHERE id = $1',
         [eventId]
@@ -152,7 +159,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const hasAgentActivity = Number(evtState.active_agent_count ?? 0) > 0;
 
       if (!hasAgentActivity) {
-        // No bets yet — sync quantities from current Polymarket prices
+        eventsReinitialized++;
         if (eventType === 'mutually_exclusive') {
           const BASE_B = 200;
           const eventQuantities = bootstrapEventQuantities(childProbs, BASE_B);
@@ -177,7 +184,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
 
       eventsSynced++;
     }
-    console.log(`[cron] Synced ${eventsSynced} events with ${childrenSynced} child markets.`);
+    console.log(`[cron] Synced ${eventsSynced} events with ${childrenSynced} child markets. Re-initialised ${eventsReinitialized} events from current Polymarket prices.`);
 
     // Verify: count markets with/without event_id
     const { rows: [eidCounts] } = await db.query(
