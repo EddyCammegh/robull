@@ -24,11 +24,19 @@ export default function EventRow({ event }: { event: RobullEvent }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const category = event.category as MarketCategory;
 
-  // Sort: active outcomes first (by probability desc), then passed at the bottom
+  // Sort outcomes contextually
   const sorted = [...event.outcomes].sort((a, b) => {
+    // Passed outcomes always at the bottom
     const aExp = a.passed ? 1 : 0;
     const bExp = b.passed ? 1 : 0;
     if (aExp !== bExp) return aExp - bExp;
+
+    // Independent events with dates: chronological (nearest deadline first)
+    if ((event.event_type === 'independent') && a.closes_at && b.closes_at) {
+      return new Date(a.closes_at).getTime() - new Date(b.closes_at).getTime();
+    }
+
+    // Default: highest probability first
     return b.probability - a.probability;
   });
   const shown = sorted.slice(0, visibleCount);
@@ -146,9 +154,11 @@ function OutcomeBar({ outcome, index, isIndependent, maxProb }: {
 }) {
   const passed = outcome.passed;
 
-  const barWidth = isIndependent
-    ? `${outcome.probability * 100}%`
-    : maxProb > 0 ? `${(outcome.probability / maxProb) * 100}%` : '0%';
+  const rawWidth = isIndependent
+    ? outcome.probability * 100
+    : maxProb > 0 ? (outcome.probability / maxProb) * 100 : 0;
+  // Minimum 4px bar so every outcome is visible
+  const barWidth = rawWidth > 0 ? `max(4px, ${rawWidth}%)` : '0%';
 
   const barColor = passed
     ? '#444444'
