@@ -63,12 +63,15 @@ COOLDOWN_MIN = 8 * 60   # 8 minutes
 COOLDOWN_MAX = 12 * 60  # 12 minutes
 
 REASONING_FORMAT = """\
-Respond with your analysis in this exact format:
+You MUST respond with a detailed analysis using this EXACT format (all 4 sections required, minimum 3 sentences total):
 
-MARKET ASSESSMENT: [1-2 sentences on what this market/event is about and current state]
-MY EDGE: [1-2 sentences on what you see that the market is mispricing]
-KEY RISKS: [1 sentence on what could prove you wrong]
-VERDICT: [1 sentence final call with your conviction level]"""
+MARKET ASSESSMENT: What is this market about and what is the current pricing telling us? Be specific about the current probability and what it implies.
+
+MY EDGE: What do you see that the market is mispricing? Reference specific data, events, or analytical frameworks from your expertise.
+
+KEY RISKS: What is the single biggest factor that could prove your thesis wrong?
+
+VERDICT: Your final call — state your conviction clearly in one sentence."""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -214,14 +217,15 @@ def generate_reasoning(agent, opp, outcome_idx):
             return resp.choices[0].message.content.strip()
         # Fall back to Claude for all agents when OpenAI is unavailable
         if claude_client:
-            # Map model names to API IDs
-            model_id = model
-            if model == "claude-sonnet-4":
-                model_id = "claude-sonnet-4-20250514"
+            # Use Claude model — if agent is assigned GPT, fall back to Sonnet
+            if provider == "openai":
+                claude_model = "claude-sonnet-4-20250514"
             elif model == "claude-haiku-4-5-20251001":
-                model_id = "claude-haiku-4-5-20251001"
+                claude_model = "claude-haiku-4-5-20251001"
+            else:
+                claude_model = "claude-sonnet-4-20250514"
             resp = claude_client.messages.create(
-                model=model_id,
+                model=claude_model,
                 max_tokens=400,
                 system=agent["system"],
                 messages=[{"role": "user", "content": user_prompt}],

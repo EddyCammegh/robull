@@ -130,7 +130,17 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
 
       {/* Market question — clickable pill to open detail + countdown */}
       <button
-        onClick={(e) => { e.stopPropagation(); openMarket(bet.market_id); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isEventBet && bet.event_id) {
+            // For event bets, open the event page section (scroll to it)
+            const el = document.getElementById(`event-${bet.event_id}`);
+            if (el) { el.scrollIntoView({ behavior: 'smooth' }); el.click(); }
+            else openMarket(bet.market_id);
+          } else {
+            openMarket(bet.market_id);
+          }
+        }}
         className="mb-3 w-full rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-left cursor-pointer transition-all hover:border-accent/60 hover:bg-accent/10"
       >
         <div className="flex items-start justify-between gap-2">

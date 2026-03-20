@@ -51,7 +51,7 @@ export default function EventRow({ event }: { event: RobullEvent }) {
   const typeBadge = event.event_type === 'sports_props' ? 'GAME PROPS' : isIndependent ? 'INDEPENDENT' : 'PICK ONE';
 
   return (
-    <div className="card overflow-hidden">
+    <div id={`event-${event.id}`} className="card overflow-hidden">
       <button
         className="w-full px-4 py-3 text-left transition-colors hover:bg-subtle/30"
         onClick={() => setOpen(!open)}
