@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import clsx from 'clsx';
-import { formatDistanceToNow } from 'date-fns';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
-import OutcomeBadge from './OutcomeBadge';
+import BetThread from './BetThread';
 import type { Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -17,12 +16,6 @@ const CATEGORY_CLASS: Record<MarketCategory, string> = {
   ENTERTAINMENT: 'cat-ENTERTAINMENT',
   OTHER:         'cat-OTHER',
 };
-
-function countryFlag(code: string): string {
-  return code
-    .toUpperCase()
-    .replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
-}
 
 interface EventOutcome {
   market_id: string;
@@ -59,7 +52,6 @@ interface EventDetailModalProps {
 }
 
 export default function EventDetailModal({ event, loading, onClose }: EventDetailModalProps) {
-  const [expandedBet, setExpandedBet] = useState<string | null>(null);
   const category = event.category as MarketCategory;
   const bets = event.bets ?? [];
   const isIndependent = event.event_type === 'independent' || event.event_type === 'sports_props';
@@ -156,16 +148,7 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
               <h3 className="font-mono text-xs text-muted uppercase tracking-widest mb-4">
                 AGENT BETS ({bets.length})
               </h3>
-              <div className="space-y-2">
-                {bets.map((bet) => (
-                  <EventBetEntry
-                    key={bet.id}
-                    bet={bet}
-                    expanded={expandedBet === bet.id}
-                    onToggle={() => setExpandedBet(expandedBet === bet.id ? null : bet.id)}
-                  />
-                ))}
-              </div>
+              <BetThread bets={bets} defaultExpanded={true} />
             </div>
           )}
         </div>
@@ -179,48 +162,3 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
   );
 }
 
-function EventBetEntry({ bet, expanded, onToggle }: {
-  bet: Bet; expanded: boolean; onToggle: () => void;
-}) {
-  const reasoning = bet.reasoning ?? '';
-  const LIMIT = 200;
-  const isLong = reasoning.length > LIMIT;
-  const outcomeLabel = (bet as any).outcome_label ?? bet.outcome_name ?? `Outcome ${bet.outcome_index}`;
-
-  return (
-    <div className="rounded bg-background border border-border p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm flex-shrink-0">{countryFlag(bet.country_code ?? 'XX')}</span>
-        <span className="font-mono text-xs font-semibold text-white">{bet.agent_name}</span>
-        <span className="font-mono text-[10px] text-muted">{bet.org}{bet.org && bet.model ? ' · ' : ''}{bet.model}</span>
-        <span className="ml-auto flex items-center gap-2 flex-shrink-0">
-          <span className="rounded bg-accent/10 border border-accent/30 px-1.5 py-0.5 font-mono text-[10px] font-bold text-accent">
-            {outcomeLabel}
-          </span>
-          <span className="font-mono text-[10px] text-muted">{bet.gns_wagered.toLocaleString()} GNS</span>
-          <span className="font-mono text-[10px] text-muted">{bet.confidence}%</span>
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1 rounded-full bg-subtle overflow-hidden">
-          <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${bet.confidence}%` }} />
-        </div>
-        <span className="font-mono text-[10px] text-muted flex-shrink-0">
-          {formatDistanceToNow(new Date(bet.created_at), { addSuffix: true })}
-        </span>
-      </div>
-
-      <div>
-        <p className="font-body text-sm leading-relaxed text-gray-300">
-          {isLong && !expanded ? `${reasoning.slice(0, LIMIT)}...` : reasoning}
-        </p>
-        {isLong && (
-          <button onClick={onToggle} className="mt-1 font-mono text-xs text-accent hover:text-accent-dim">
-            {expanded ? 'COLLAPSE' : 'READ MORE'}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
