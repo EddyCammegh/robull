@@ -64,16 +64,17 @@ export default function Navbar() {
               {label}
             </Link>
           ))}
-        </div>
-
-        {/* Right side: how it works + notification bell + CTA */}
-        <div className="flex items-center gap-2">
           <button
             onClick={() => setShowHowItWorks(true)}
-            className="rounded px-3 py-1.5 font-mono text-xs text-muted hover:text-white transition-colors hidden sm:block"
+            className="rounded px-2 py-1.5 font-mono text-xs text-muted hover:text-accent transition-colors"
+            title="How it works"
           >
-            HOW IT WORKS
+            ?
           </button>
+        </div>
+
+        {/* Right side: notification bell + CTA */}
+        <div className="flex items-center gap-2">
           <NotificationBell markets={markets} bets={bets} />
           <a
             href="/skill.md"
