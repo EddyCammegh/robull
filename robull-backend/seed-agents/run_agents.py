@@ -1,160 +1,109 @@
 #!/usr/bin/env python3 -u
 """
-Robull Seed Agents — continuous betting loop.
+Robull Seed Agents — continuous betting loop for 28 agents.
 
-Each agent has a personality, preferred categories, and betting style.
-Every 60 seconds one agent picks a market or event and places a bet with
-AI-generated reasoning via Claude Haiku.
-
-Supports both:
-- Binary markets: Yes/No bets via market_id + outcome_index
-- Multi-outcome events: named outcome bets via event_id + outcome_label
+Each agent has a domain-specific system prompt, preferred categories,
+and assigned AI model (Claude or GPT). Agents bet on markets and events
+with structured reasoning.
 
 Usage:
-  pip install anthropic requests python-dotenv
-  # Set ANTHROPIC_API_KEY in .env
+  pip install anthropic openai requests python-dotenv
   python run_agents.py
 """
 
-import os, sys, time, random, json, textwrap
+import os, sys, time, random, json
 from pathlib import Path
 from dotenv import load_dotenv
 import requests
-import anthropic
 
-# ── Config ───────────────────────────────────────────────────────────────────
-
+# Load keys from .env.agents, fall back to .env
+load_dotenv(Path(__file__).parent / ".env.agents")
 load_dotenv(Path(__file__).parent / ".env")
 
-API = os.environ["ROBULL_API"]
+API = os.environ.get("ROBULL_API", "https://robull-production.up.railway.app")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-if not ANTHROPIC_KEY:
-    sys.exit("ERROR: Set ANTHROPIC_API_KEY in .env")
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 
-claude = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-HAIKU = "claude-haiku-4-5-20251001"
+# ── AI clients ──────────────────────────────────────────────────────────────
 
-# ── Agent definitions ────────────────────────────────────────────────────────
+claude_client = None
+openai_client = None
 
-AGENTS = [
-    {
-        "name": "CASSANDRA",
-        "key": os.environ["CASSANDRA_KEY"],
-        "categories": ["MACRO", "POLITICS"],
-        "min_wager": 200,
-        "max_wager": 500,
-        "system": textwrap.dedent("""\
-            You are CASSANDRA, a contrarian macro-political analyst.
-            You ALWAYS take the less popular side of a market. If consensus says YES,
-            you argue NO, and vice versa. Your style is verbose, dramatic, and
-            intellectual — you reference historical parallels, structural analysis,
-            and second-order effects that the crowd is missing.
-            Write 3-5 sentences of reasoning. Be specific and data-driven."""),
-    },
-    {
-        "name": "BAYES",
-        "key": os.environ["BAYES_KEY"],
-        "categories": ["CRYPTO", "MACRO"],
-        "min_wager": 150,
-        "max_wager": 400,
-        "system": textwrap.dedent("""\
-            You are BAYES, a probabilistic thinker from London.
-            You frame everything in terms of base rates, prior probabilities,
-            and Bayesian updates. You use language like "my prior is...",
-            "updating on this evidence...", "the posterior probability...".
-            You are measured and precise. Write 2-4 sentences."""),
-    },
-    {
-        "name": "PYTHIA",
-        "key": os.environ["PYTHIA_KEY"],
-        "categories": ["POLITICS", "MACRO"],
-        "min_wager": 150,
-        "max_wager": 350,
-        "system": textwrap.dedent("""\
-            You are PYTHIA, a Berlin-based political analyst.
-            You are driven by current events and news flow. You reference
-            recent headlines, polling data, diplomatic signals, and political
-            incentive structures. You are direct and news-driven.
-            Write 2-4 sentences."""),
-    },
-    {
-        "name": "MOMENTUM",
-        "key": os.environ["MOMENTUM_KEY"],
-        "categories": ["CRYPTO", "SPORTS"],
-        "min_wager": 100,
-        "max_wager": 300,
-        "system": textwrap.dedent("""\
-            You are MOMENTUM, a trend-following trader from Singapore.
-            You follow price action, volume trends, and market momentum.
-            You use language like "the trend is clear", "momentum is building",
-            "volume confirms". You are terse and decisive — maximum 2 sentences."""),
-    },
-    {
-        "name": "GAMBLER",
-        "key": os.environ["GAMBLER_KEY"],
-        "categories": ["SPORTS", "ENTERTAINMENT", "CRYPTO", "POLITICS"],
-        "min_wager": 50,
-        "max_wager": 150,
-        "prefer_longshots": True,
-        "system": textwrap.dedent("""\
-            You are GAMBLER, a degenerate Brazilian bettor who loves longshots.
-            You ONLY bet on outcomes priced under 25%. You are chaotic, fun,
-            and unapologetic. You use slang, hype language, exclamation marks.
-            "LFG!", "this is free money", "the odds are CRIMINAL".
-            Write 1-3 sentences of pure vibes."""),
-    },
-    {
-        "name": "NEXUS-GPT",
-        "key": os.environ["NEXUS_GPT_KEY"],
-        "categories": ["AI/TECH", "MACRO"],
-        "min_wager": 300,
-        "max_wager": 800,
-        "min_confidence": 70,
-        "system": textwrap.dedent("""\
-            You are NEXUS-GPT, an ultra-selective AI/tech analyst from Tokyo.
-            You only bet when you are genuinely very confident (70%+).
-            You are verbose and thorough — you reference technical roadmaps,
-            company earnings, semiconductor supply chains, model benchmarks,
-            and industry dynamics. Write 3-5 detailed sentences."""),
-    },
-]
+if ANTHROPIC_KEY:
+    import anthropic
+    claude_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+if OPENAI_KEY:
+    from openai import OpenAI
+    openai_client = OpenAI(api_key=OPENAI_KEY)
 
-MIN_BALANCE = 500  # Skip betting if agent balance is below this
+# ── Load agent cohorts ──────────────────────────────────────────────────────
+
+from agent_cohorts import AGENTS as COHORT_AGENTS
+
+# Build runtime agent list with API keys from environment
+AGENTS = []
+for agent_def in COHORT_AGENTS:
+    env_key = agent_def["name"].replace("-", "_").upper() + "_KEY"
+    api_key = os.environ.get(env_key)
+    if not api_key:
+        print(f"  SKIP {agent_def['name']} — no {env_key} in environment")
+        continue
+    AGENTS.append({**agent_def, "key": api_key})
+
+if not AGENTS:
+    sys.exit("ERROR: No agent keys found. Check .env.agents")
+
+print(f"Loaded {len(AGENTS)} agents")
+
+# ── Config ──────────────────────────────────────────────────────────────────
+
+MIN_BALANCE = 500
+COOLDOWN_MIN = 8 * 60   # 8 minutes
+COOLDOWN_MAX = 12 * 60  # 12 minutes
+
+REASONING_FORMAT = """\
+Respond with your analysis in this exact format:
+
+MARKET ASSESSMENT: [1-2 sentences on what this market/event is about and current state]
+MY EDGE: [1-2 sentences on what you see that the market is mispricing]
+KEY RISKS: [1 sentence on what could prove you wrong]
+VERDICT: [1 sentence final call with your conviction level]"""
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+_balance_cache: dict[str, float] = {}
 
 
 def fetch_markets():
-    """Fetch all unresolved standalone binary markets."""
     resp = requests.get(f"{API}/v1/markets", params={"resolved": "false"}, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
 
 def fetch_events():
-    """Fetch all active multi-outcome events."""
     resp = requests.get(f"{API}/v1/events", timeout=15)
     resp.raise_for_status()
     return resp.json()
 
 
-def fetch_balance(agent):
-    """Fetch the agent's current GNS balance from the leaderboard."""
+def fetch_balances():
+    """Fetch all agent balances in one call."""
+    global _balance_cache
     try:
         resp = requests.get(f"{API}/v1/agents/leaderboard", timeout=15)
         resp.raise_for_status()
-        for entry in resp.json():
-            if entry.get("name") == agent["name"]:
-                return float(entry.get("gns_balance", 0))
+        _balance_cache = {e["name"]: float(e.get("gns_balance", 0)) for e in resp.json()}
     except Exception as e:
-        print(f"  [{agent['name']}] Failed to fetch balance: {e}")
-    return None
+        print(f"  [!] Failed to fetch balances: {e}")
+
+
+def get_balance(agent_name: str) -> float:
+    return _balance_cache.get(agent_name, 10000)
 
 
 def build_opportunities(markets, events):
-    """Combine binary markets and events into a unified list of betting opportunities."""
     ops = []
-
     for m in markets:
         probs = m.get("current_probs", m.get("initial_probs", []))
         ops.append({
@@ -166,68 +115,53 @@ def build_opportunities(markets, events):
             "probabilities": probs,
             "volume": float(m.get("volume", 0)),
         })
-
     for e in events:
         outcomes = e.get("outcomes", [])
-        if len(outcomes) < 2:
+        active = [o for o in outcomes if not o.get("passed")]
+        if len(active) < 2:
             continue
         ops.append({
             "type": "event",
             "event_id": e["id"],
             "question": e["title"],
             "category": e.get("category", "OTHER"),
-            "outcomes": [o["label"] for o in outcomes],
-            "probabilities": [o["probability"] for o in outcomes],
+            "outcomes": [o["label"] for o in active],
+            "probabilities": [o["probability"] for o in active],
             "volume": float(e.get("volume", 0)),
         })
-
     return ops
 
 
 def pick_opportunity(agent, opportunities):
-    """Pick an opportunity matching the agent's preferred categories."""
     preferred = [o for o in opportunities if o["category"] in agent["categories"]]
-    pool = preferred if preferred else opportunities
+    pool = preferred if preferred else []
     if not pool:
         return None
 
-    # GAMBLER prefers longshot outcomes (any outcome priced under 0.25)
     if agent.get("prefer_longshots"):
-        longshots = [o for o in pool if any(p < 0.25 for p in o.get("probabilities", []))]
+        longshots = [o for o in pool if any(p < 0.15 for p in o.get("probabilities", []))]
         if longshots:
             pool = longshots
 
     return random.choice(pool)
 
 
-def pick_outcome_for_opportunity(agent, opp):
-    """Choose which outcome to bet on for a given opportunity."""
+def pick_outcome(agent, opp):
     probs = opp.get("probabilities", [])
     outcomes = opp.get("outcomes", [])
     if not probs or not outcomes:
         return 0
 
-    # CASSANDRA: always contrarian — pick the LESS likely outcome
-    if agent["name"] == "CASSANDRA":
-        return int(probs.index(min(probs)))
-
-    # GAMBLER: pick the cheapest outcome (longshot)
+    # Longshot agents: pick cheapest outcome
     if agent.get("prefer_longshots"):
-        # For events with many outcomes, pick a random longshot under 25%
-        longshot_indices = [i for i, p in enumerate(probs) if p < 0.25]
+        longshot_indices = [i for i, p in enumerate(probs) if p < 0.15]
         if longshot_indices:
             return random.choice(longshot_indices)
         return int(probs.index(min(probs)))
 
-    # MOMENTUM: pick the MORE likely outcome (trend following)
-    if agent["name"] == "MOMENTUM":
-        return int(probs.index(max(probs)))
-
-    # Default: weighted random — slight preference for the underdog
-    weights = [1 - p for p in probs]
+    # Default: weighted random — slight preference for less likely outcomes
+    weights = [max(1 - p, 0.05) for p in probs]
     total = sum(weights)
-    if total == 0:
-        return 0
     r = random.random() * total
     cum = 0
     for i, w in enumerate(weights):
@@ -238,14 +172,12 @@ def pick_outcome_for_opportunity(agent, opp):
 
 
 def generate_reasoning(agent, opp, outcome_idx):
-    """Use Claude Haiku to generate reasoning for the bet."""
     outcomes = opp.get("outcomes", [])
     probs = opp.get("probabilities", [])
     chosen = outcomes[outcome_idx] if outcome_idx < len(outcomes) else "Unknown"
     prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
 
     if opp["type"] == "event":
-        # Show all outcomes for multi-outcome events
         outcome_lines = "\n".join(
             f"  - {outcomes[i]}: {probs[i]:.1%}" for i in range(min(len(outcomes), 12))
         )
@@ -254,8 +186,7 @@ def generate_reasoning(agent, opp, outcome_idx):
             f"Category: {opp['category']}\n"
             f"Available outcomes:\n{outcome_lines}\n\n"
             f"You are betting on: {chosen} (currently priced at {prob:.1%})\n\n"
-            f"Write your reasoning for choosing this specific outcome over the others. "
-            f"Be specific to THIS event."
+            f"{REASONING_FORMAT}"
         )
     else:
         user_prompt = (
@@ -264,24 +195,46 @@ def generate_reasoning(agent, opp, outcome_idx):
             f"Outcomes: {', '.join(outcomes)}\n"
             f"Current probabilities: {', '.join(f'{p:.1%}' for p in probs)}\n"
             f"You are betting: {chosen} (currently priced at {prob:.1%})\n\n"
-            f"Write your reasoning for this bet. Be specific to THIS market."
+            f"{REASONING_FORMAT}"
         )
 
+    provider = agent.get("provider", "anthropic")
+    model = agent.get("model", "claude-sonnet-4")
+
     try:
-        resp = claude.messages.create(
-            model=HAIKU,
-            max_tokens=300,
-            system=agent["system"],
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return resp.content[0].text.strip()
+        if provider == "openai" and openai_client:
+            resp = openai_client.chat.completions.create(
+                model=model,
+                max_tokens=400,
+                messages=[
+                    {"role": "system", "content": agent["system"]},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            return resp.choices[0].message.content.strip()
+        # Fall back to Claude for all agents when OpenAI is unavailable
+        if claude_client:
+            # Map model names to API IDs
+            model_id = model
+            if model == "claude-sonnet-4":
+                model_id = "claude-sonnet-4-20250514"
+            elif model == "claude-haiku-4-5-20251001":
+                model_id = "claude-haiku-4-5-20251001"
+            resp = claude_client.messages.create(
+                model=model_id,
+                max_tokens=400,
+                system=agent["system"],
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            return resp.content[0].text.strip()
+        else:
+            return f"Taking {chosen} at {prob:.0%} based on current analysis."
     except Exception as e:
-        print(f"  [!] Claude API error: {e}")
+        print(f"  [!] AI API error ({provider}/{model}): {e}")
         return f"Taking {chosen} at {prob:.0%} based on current analysis."
 
 
 def place_bet(agent, opp, outcome_idx, reasoning):
-    """Place a bet via the Robull API."""
     wager = random.randint(agent["min_wager"], agent["max_wager"])
     wager = max(100, (wager // 50) * 50)
 
@@ -289,7 +242,6 @@ def place_bet(agent, opp, outcome_idx, reasoning):
     prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
     confidence = max(30, min(95, int(prob * 100) + random.randint(-10, 15)))
 
-    # NEXUS-GPT: only bets at high confidence
     min_conf = agent.get("min_confidence", 0)
     if confidence < min_conf:
         print(f"  [{agent['name']}] Confidence {confidence}% below threshold {min_conf}%, skipping.")
@@ -323,62 +275,57 @@ def place_bet(agent, opp, outcome_idx, reasoning):
             timeout=15,
         )
         if resp.status_code == 201:
-            label = f"'{chosen}'" if opp["type"] == "event" else f"'{chosen}'"
-            print(f"  [{agent['name']}] BET {wager} GNS on {label} @ {confidence}% — {opp['question'][:60]}...")
+            print(f"  [{agent['name']}] BET {wager} GNS on '{chosen}' @ {confidence}% — {opp['question'][:60]}")
             return resp.json()
         else:
-            print(f"  [{agent['name']}] Bet rejected: {resp.status_code} {resp.text[:100]}")
+            err = resp.text[:120]
+            print(f"  [{agent['name']}] Rejected: {resp.status_code} {err}")
             return None
     except Exception as e:
         print(f"  [{agent['name']}] Request failed: {e}")
         return None
 
 
-# ── Main loop ────────────────────────────────────────────────────────────────
+# ── Cooldown tracking ───────────────────────────────────────────────────────
 
-COOLDOWN_MIN = 3 * 60   # 3 minutes in seconds
-COOLDOWN_MAX = 5 * 60   # 5 minutes in seconds
-# Per-agent cooldown: maps agent name → (last_bet_timestamp, cooldown_seconds)
 _last_bet: dict[str, tuple[float, float]] = {}
 
 
-def _is_on_cooldown(agent_name: str) -> bool:
-    """Return True if this agent bet too recently."""
-    if agent_name not in _last_bet:
+def _is_on_cooldown(name: str) -> bool:
+    if name not in _last_bet:
         return False
-    last_time, cooldown = _last_bet[agent_name]
+    last_time, cooldown = _last_bet[name]
     return (time.time() - last_time) < cooldown
 
 
-def _record_bet(agent_name: str) -> None:
-    """Record that this agent just bet, with a randomised cooldown."""
-    _last_bet[agent_name] = (time.time(), random.uniform(COOLDOWN_MIN, COOLDOWN_MAX))
+def _record_bet(name: str):
+    _last_bet[name] = (time.time(), random.uniform(COOLDOWN_MIN, COOLDOWN_MAX))
 
+
+# ── Main loop ──────────────────────────────────────────────────────────────
 
 def run_cycle(opportunities):
-    """Run one betting cycle: pick 1-2 agents, have them bet."""
-    num_bets = random.choice([1, 1, 2])
-    agents_this_round = random.sample(AGENTS, min(num_bets, len(AGENTS)))
+    num_agents = random.choice([1, 1, 2, 2, 3])
+    candidates = [a for a in AGENTS if not _is_on_cooldown(a["name"])]
+    if not candidates:
+        print("  All agents on cooldown.")
+        return
+
+    agents_this_round = random.sample(candidates, min(num_agents, len(candidates)))
 
     for agent in agents_this_round:
         name = agent["name"]
+        balance = get_balance(name)
 
-        if _is_on_cooldown(name):
-            remaining = _last_bet[name][0] + _last_bet[name][1] - time.time()
-            print(f"  [{name}] On cooldown ({remaining:.0f}s remaining), skipping.")
-            continue
-
-        balance = fetch_balance(agent)
-        if balance is not None and balance < MIN_BALANCE:
-            print(f"  [{name}] Balance {balance:.0f} GNS below {MIN_BALANCE} GNS minimum, skipping.")
+        if balance < MIN_BALANCE:
+            print(f"  [{name}] Balance {balance:.0f} GNS below {MIN_BALANCE}, skipping.")
             continue
 
         opp = pick_opportunity(agent, opportunities)
         if not opp:
-            print(f"  [{name}] No suitable opportunities found, skipping.")
             continue
 
-        outcome_idx = pick_outcome_for_opportunity(agent, opp)
+        outcome_idx = pick_outcome(agent, opp)
         reasoning = generate_reasoning(agent, opp, outcome_idx)
         result = place_bet(agent, opp, outcome_idx, reasoning)
         if result is not None:
@@ -387,9 +334,12 @@ def run_cycle(opportunities):
 
 def main():
     print("=" * 60)
-    print("  ROBULL SEED AGENTS — Starting continuous betting loop")
+    print("  ROBULL SEED AGENTS v2 — 28 agents, continuous loop")
     print(f"  API: {API}")
-    print(f"  Agents: {', '.join(a['name'] for a in AGENTS)}")
+    print(f"  Agents: {len(AGENTS)} loaded")
+    print(f"  Anthropic: {'yes' if claude_client else 'NO'}")
+    print(f"  OpenAI: {'yes' if openai_client else 'NO'}")
+    print(f"  Cooldown: {COOLDOWN_MIN//60}-{COOLDOWN_MAX//60} min per agent")
     print("=" * 60)
 
     cycle = 0
@@ -398,10 +348,11 @@ def main():
         print(f"\n--- Cycle {cycle} ({time.strftime('%H:%M:%S')}) ---")
 
         try:
+            fetch_balances()
             markets = fetch_markets()
             events = fetch_events()
             opportunities = build_opportunities(markets, events)
-            print(f"  Fetched {len(markets)} markets + {len(events)} events = {len(opportunities)} opportunities")
+            print(f"  {len(markets)} markets + {len(events)} events = {len(opportunities)} opportunities")
             if opportunities:
                 run_cycle(opportunities)
             else:
@@ -409,7 +360,6 @@ def main():
         except Exception as e:
             print(f"  [!] Cycle failed: {e}")
 
-        # Wait 45-75 seconds (randomized to avoid predictable patterns)
         wait = random.randint(45, 75)
         print(f"  Sleeping {wait}s...")
         time.sleep(wait)
