@@ -55,6 +55,35 @@ export interface NormalisedMarket {
   event_title: string | null;
 }
 
+// ─── Helper: extract a date from an outcome label like "June 30, 2026" ─────────
+const MONTHS: Record<string, string> = {
+  january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+  july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
+};
+const LABEL_DATE_RE = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:,?\s+(\d{4}))?\b/i;
+const LABEL_Q_RE = /\bQ([1-4])\s+(\d{4})\b/i;
+
+function parseDateFromLabel(label: string): string | null {
+  // Match "June 30, 2026" or "June 30"
+  const m = LABEL_DATE_RE.exec(label);
+  if (m) {
+    const month = MONTHS[m[1].toLowerCase()];
+    const day = m[2].padStart(2, '0');
+    const year = m[3] ?? new Date().getFullYear().toString();
+    return `${year}-${month}-${day}T23:59:59Z`;
+  }
+  // Match "Q2 2026"
+  const q = LABEL_Q_RE.exec(label);
+  if (q) {
+    const quarter = parseInt(q[1]);
+    const year = q[2];
+    const endMonth = quarter * 3;
+    const lastDay = new Date(parseInt(year), endMonth, 0).getDate();
+    return `${year}-${String(endMonth).padStart(2, '0')}-${lastDay}T23:59:59Z`;
+  }
+  return null;
+}
+
 // ─── Helper: build a case-insensitive regex from an array of patterns ──────────
 function re(patterns: RegExp[]): RegExp {
   return new RegExp(patterns.map(r => r.source).join('|'), 'i');
@@ -545,6 +574,11 @@ export async function fetchPolymarketEvents(): Promise<NormalisedEvent[]> {
         const b = computeB(vol > 0 ? vol : evtVolume / childMarkets.length);
         const quantities = bootstrapQuantities(probs, b);
 
+        // For date-based outcomes, try to extract closes_at from the label
+        // e.g. "June 30, 2026" → 2026-06-30, "March 31, 2026" → 2026-03-31
+        const labelDate = parseDateFromLabel(label);
+        const closesAt = labelDate ?? m.endDate ?? evt.endDate ?? null;
+
         children.push({
           polymarket_id: m.id,
           question: m.question,
@@ -554,7 +588,7 @@ export async function fetchPolymarketEvents(): Promise<NormalisedEvent[]> {
           outcomes: ['Yes', 'No'],
           quantities,
           initial_probs: probs,
-          closes_at: m.endDate ?? evt.endDate ?? null,
+          closes_at: closesAt,
         });
       }
 

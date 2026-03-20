@@ -55,33 +55,6 @@ async function start() {
   // Health check
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
-  // Temporary debug — remove after use
-  app.get('/v1/admin/check-ukraine', async (req, reply) => {
-    if (req.headers['x-admin-key'] !== 'robull-reset-2026') {
-      return reply.status(403).send({ error: 'Forbidden' });
-    }
-
-    const { rows: events } = await app.db.query(`
-      SELECT id, title, resolved, event_type, category
-      FROM events WHERE title ILIKE '%Ukraine election held%'
-    `);
-
-    const children = [];
-    for (const evt of events) {
-      const { rows } = await app.db.query(`
-        SELECT outcome_label, resolved, closes_at, winning_outcome, event_id, category,
-               polymarket_id, question
-        FROM markets WHERE event_id = $1
-        ORDER BY polymarket_id ASC
-      `, [evt.id]);
-      children.push({ event: evt, markets: rows });
-    }
-
-    // Also check server time
-    const { rows: [serverTime] } = await app.db.query(`SELECT NOW() AS server_now`);
-
-    return { server_now: serverTime.server_now, events: children };
-  });
 
   // Start server
   const port = Number(process.env.PORT ?? 3001);
