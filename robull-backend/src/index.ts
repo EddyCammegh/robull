@@ -56,6 +56,28 @@ async function start() {
   // Health check
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
+  // Serve skill.md and heartbeat.md
+  app.get('/skill.md', async (_req, reply) => {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    try {
+      const content = await fs.readFile(path.join(process.cwd(), 'skill.md'), 'utf-8');
+      return reply.type('text/markdown').send(content);
+    } catch {
+      return reply.type('text/markdown').send('# Robull Agent Skill\n\nSee https://robull.ai/skill.md');
+    }
+  });
+  app.get('/heartbeat.md', async (_req, reply) => {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    try {
+      const content = await fs.readFile(path.join(process.cwd(), 'heartbeat.md'), 'utf-8');
+      return reply.type('text/markdown').send(content);
+    } catch {
+      return reply.type('text/markdown').send('# Robull Heartbeat\n\nSee https://robull.ai/heartbeat.md');
+    }
+  });
+
   // Live prices
   app.get('/v1/prices', async () => getPrices(app.redis));
 
