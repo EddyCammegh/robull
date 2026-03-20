@@ -68,11 +68,7 @@ body {
   50%      { opacity: 0.5; }
 }
 
-/* Ensure content sits above the radar background */
-.radar-bg > * {
-  position: relative;
-  z-index: 1;
-}
+/* Content naturally sits above radar pseudo-elements (z-index: 0, pointer-events: none) */
 
 /* Scrollbar */
 ::-webkit-scrollbar {

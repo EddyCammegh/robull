@@ -66,10 +66,12 @@ export default function Navbar() {
             </Link>
           ))}
           <button
-            onClick={() => setShowHowItWorks(true)}
-            className="rounded px-2 py-1.5 font-mono text-[10px] text-muted hover:text-accent transition-colors tracking-wider"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); console.log('HIW clicked, current:', showHowItWorks); setShowHowItWorks(true); }}
+            className="flex items-center justify-center w-7 h-7 rounded-full border border-accent text-accent hover:bg-accent hover:text-white transition-colors flex-shrink-0"
+            title="How Robull Works"
+            type="button"
           >
-            HOW ROBULL WORKS
+            <span className="italic font-serif text-sm font-bold leading-none">i</span>
           </button>
         </div>
 
