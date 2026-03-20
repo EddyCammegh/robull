@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import LiveFeed from './LiveFeed';
 import Sidebar from './Sidebar';
+import NewsPanel from './NewsPanel';
 import type { Bet, Agent } from '@/types';
 
 interface FeedContainerProps {
@@ -33,7 +34,7 @@ export default function FeedContainer({
         pinnedBetId={pinnedBetId}
         onPin={setPinnedBetId}
       />
-      <div className="hidden lg:block">
+      <div className="hidden lg:block space-y-4">
         <Sidebar
           topAgents={topAgents}
           recentBets={initialBets}
@@ -44,6 +45,7 @@ export default function FeedContainer({
           onCategoryChange={setCategory}
           onAgentChange={setAgentFilter}
         />
+        <NewsPanel />
       </div>
     </div>
   );

@@ -3,6 +3,14 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 
+function formatPrice(value: number, pair: string): string {
+  if (pair.includes('JPY') || pair.includes('KRW')) return value.toFixed(0);
+  if (pair.includes('INR') || pair.includes('BRL') || pair.includes('MXN') || pair.includes('HKD')) return value.toFixed(2);
+  if (value >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (value >= 1) return value.toFixed(2);
+  return value.toFixed(4);
+}
+
 export default function PriceBar() {
   const [prices, setPrices] = useState<{
     crypto: { symbol: string; price_usd: number }[];
@@ -10,39 +18,42 @@ export default function PriceBar() {
   } | null>(null);
 
   useEffect(() => {
-    const fetch = async () => {
-      try {
-        const data = await api.prices.get();
-        setPrices(data);
-      } catch {}
+    const fetchPrices = async () => {
+      try { setPrices(await api.prices.get()); } catch {}
     };
-    fetch();
-    const interval = setInterval(fetch, 60_000);
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 60_000);
     return () => clearInterval(interval);
   }, []);
 
-  if (!prices || (prices.crypto.length === 0 && prices.fx.length === 0)) return null;
+  if (!prices || (prices.crypto.length === 0 && prices.fx.length === 0)) {
+    return <div className="h-6 bg-[#0a0a0a] border-b border-border/50" />;
+  }
+
+  const items = [
+    ...prices.crypto.map((c) => (
+      <span key={c.symbol} className="inline-flex items-center gap-1 px-3 flex-shrink-0">
+        <span className="font-mono text-[9px] text-muted">{c.symbol}</span>
+        <span className="font-mono text-[10px] text-white font-semibold tabular-nums">
+          ${formatPrice(c.price_usd, c.symbol)}
+        </span>
+      </span>
+    )),
+    ...prices.fx.map((f) => (
+      <span key={f.pair} className="inline-flex items-center gap-1 px-3 flex-shrink-0">
+        <span className="font-mono text-[9px] text-muted">{f.pair}</span>
+        <span className="font-mono text-[10px] text-white font-semibold tabular-nums">
+          {formatPrice(f.rate, f.pair)}
+        </span>
+      </span>
+    )),
+  ];
 
   return (
-    <div className="w-full border-b border-border bg-surface/50 px-4 py-1.5 overflow-x-auto">
-      <div className="flex items-center gap-4 font-mono text-[11px] whitespace-nowrap">
-        {prices.crypto.map((c) => (
-          <span key={c.symbol} className="text-gray-300">
-            <span className="text-muted">{c.symbol}</span>{' '}
-            <span className="text-white font-semibold">
-              ${c.price_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            </span>
-          </span>
-        ))}
-        <span className="text-border">|</span>
-        {prices.fx.map((f) => (
-          <span key={f.pair} className="text-gray-300">
-            <span className="text-muted">{f.pair}</span>{' '}
-            <span className="text-white font-semibold">
-              {f.rate.toFixed(f.pair.includes('JPY') || f.pair.includes('CNY') ? 2 : 4)}
-            </span>
-          </span>
-        ))}
+    <div className="bg-[#0a0a0a] border-b border-border/50 overflow-hidden">
+      <div className="price-ticker-track flex items-center py-1">
+        <div className="price-ticker-content flex items-center">{items}</div>
+        <div className="price-ticker-content flex items-center" aria-hidden>{items}</div>
       </div>
     </div>
   );

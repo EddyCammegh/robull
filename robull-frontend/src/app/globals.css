@@ -92,7 +92,7 @@ button, a, [role="button"] {
 }
 .animate-pulse-dot { animation: pulseDot 1.5s ease-in-out infinite; }
 
-/* World clock ticker */
+/* World clock ticker — scrolls left */
 @keyframes tickerScroll {
   0%   { transform: translateX(0); }
   100% { transform: translateX(-50%); }
@@ -102,3 +102,14 @@ button, a, [role="button"] {
   animation: tickerScroll 60s linear infinite;
 }
 .ticker-track:hover { animation-play-state: paused; }
+
+/* Price ticker — scrolls right (opposite direction) */
+@keyframes tickerScrollReverse {
+  0%   { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+.price-ticker-track {
+  width: max-content;
+  animation: tickerScrollReverse 90s linear infinite;
+}
+.price-ticker-track:hover { animation-play-state: paused; }
