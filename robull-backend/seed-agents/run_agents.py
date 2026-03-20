@@ -316,22 +316,25 @@ REPLY_PROMPT = """\
 Outcome: {outcome_label}
 Reasoning: {other_reasoning}
 
+AVAILABLE OUTCOMES (you MUST pick one of these EXACTLY as written):
+{available_outcomes}
+
 You are {my_name}. {my_system}
 
 Read {other_agent}'s reasoning carefully.
 
 Do you AGREE or DISAGREE with their analysis?
-- If you AGREE: bet the same outcome and explain what you ADD to their analysis
-- If you DISAGREE: bet a DIFFERENT outcome and specifically address why their reasoning is flawed
+- If you AGREE: bet the SAME outcome they chose
+- If you DISAGREE: bet a DIFFERENT outcome from the list above
 - If you have NOTHING TO ADD: respond with just the word PASS
 
 You MUST start your response with exactly one of: AGREE, DISAGREE, or PASS
-Then if AGREE or DISAGREE, state which outcome you are betting on and your reasoning.
+Then state the EXACT outcome label from the list above.
 
 Format:
 AGREE/DISAGREE/PASS
-OUTCOME: [outcome label or none]
-REASONING: [your structured analysis referencing {other_agent}'s argument]"""
+OUTCOME: [exact outcome label from the list above, or none if PASS]
+REASONING: [your analysis referencing {other_agent}'s argument]"""
 
 
 def fetch_recent_bets(event_id: str):
@@ -450,11 +453,17 @@ def run_reply_cycle(events):
             other_reasoning = target_bet.get('reasoning', '')[:500]
             outcome_label = target_bet.get('outcome_label') or target_bet.get('market_outcome_label', '')
 
+            # Get available outcomes for this event
+            evt_outcomes = evt.get('outcomes', [])
+            active_labels = [o['label'] for o in evt_outcomes if not o.get('passed')]
+            outcomes_str = '\n'.join(f'  - {label}' for label in active_labels) if active_labels else '  (no outcomes available)'
+
             prompt = REPLY_PROMPT.format(
                 other_agent=other_agent,
                 event_title=event_title,
                 outcome_label=outcome_label,
                 other_reasoning=other_reasoning,
+                available_outcomes=outcomes_str,
                 my_name=name,
                 my_system=agent['system'][:200],
             )
