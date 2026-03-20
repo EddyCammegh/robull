@@ -55,49 +55,6 @@ async function start() {
   // Health check
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
-  // Temporary admin endpoint — remove after use
-  app.get('/v1/admin/fix-sentinel', async (req, reply) => {
-    if (req.headers['x-admin-key'] !== 'robull-reset-2026') {
-      return reply.status(403).send({ error: 'Forbidden' });
-    }
-
-    // Clear sentinel from valid markets
-    const { rowCount: cleared } = await app.db.query(`
-      UPDATE markets SET resolved = false, winning_outcome = NULL, updated_at = NOW()
-      WHERE winning_outcome = -1
-        AND category IN ('POLITICS','CRYPTO','MACRO','AI/TECH')
-    `);
-
-    // Un-resolve valid markets
-    const { rowCount: marketsFixed } = await app.db.query(`
-      UPDATE markets SET resolved = false, updated_at = NOW()
-      WHERE category IN ('POLITICS','CRYPTO','MACRO','AI/TECH')
-        AND winning_outcome IS NULL
-        AND closes_at > NOW()
-        AND resolved = true
-    `);
-
-    // Un-resolve valid events
-    const { rowCount: eventsFixed } = await app.db.query(`
-      UPDATE events SET resolved = false, updated_at = NOW()
-      WHERE category IN ('POLITICS','CRYPTO','MACRO','AI/TECH')
-        AND winning_outcome_label IS NULL
-        AND resolved = true
-    `);
-
-    // Verify remaining sentinels (should only be excluded categories)
-    const { rows: [remaining] } = await app.db.query(`
-      SELECT COUNT(*)::int AS count FROM markets WHERE winning_outcome = -1
-    `);
-
-    return {
-      sentinel_cleared: cleared,
-      markets_unclosed: marketsFixed,
-      events_unclosed: eventsFixed,
-      sentinel_remaining_excluded_only: remaining.count,
-    };
-  });
-
   // Start server
   const port = Number(process.env.PORT ?? 3001);
   await app.listen({ port, host: '0.0.0.0' });
