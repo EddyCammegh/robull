@@ -119,4 +119,13 @@ export interface SSEOddsEvent {
   probs: number[];
 }
 
-export type SSEEvent = SSEBetEvent | SSEOddsEvent | { type: 'connected'; clients: number };
+export interface SSEMarketResolvedEvent {
+  type: 'market_resolved';
+  market_title: string;
+  winning_outcome: string;
+  total_winners: number;
+  total_losers: number;
+  top_payouts: { agent_name: string; country_code: string; gns_won: number }[];
+}
+
+export type SSEEvent = SSEBetEvent | SSEOddsEvent | SSEMarketResolvedEvent | { type: 'connected'; clients: number };

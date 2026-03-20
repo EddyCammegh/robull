@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import BetCard from './BetCard';
+import ResolutionBanner, { type Resolution } from './ResolutionBanner';
+import ResolutionCard from './ResolutionCard';
 import { useSSE } from '@/lib/sse';
 import { fixBetNumerics } from '@/lib/api';
 import type { Bet, SSEEvent } from '@/types';
@@ -33,11 +35,31 @@ export default function LiveFeed({
   onPin,
 }: LiveFeedProps) {
   const [bets, setBets] = useState<(Bet & { _new?: boolean })[]>(initialBets);
+  const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const sseReceivedRef = useRef(false);
   const lastPollRef = useRef<string | null>(null);
 
-  // Handle live SSE bet events
+  const dismissResolution = useCallback((id: string) => {
+    setResolutions((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  // Handle live SSE events
   const handleSSE = useCallback((event: SSEEvent) => {
+    if (event.type === 'market_resolved') {
+      sseReceivedRef.current = true;
+      const resolution: Resolution = {
+        id: `res-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        market_title: event.market_title,
+        winning_outcome: event.winning_outcome,
+        total_winners: event.total_winners,
+        total_losers: event.total_losers,
+        top_payouts: event.top_payouts,
+        ts: Date.now(),
+      };
+      setResolutions((prev) => [resolution, ...prev].slice(0, 10));
+      return;
+    }
+
     if (event.type !== 'bet') return;
     sseReceivedRef.current = true;
 
@@ -112,6 +134,11 @@ export default function LiveFeed({
 
   return (
     <div>
+      {/* Resolution banners — auto-dismiss after 8s */}
+      {resolutions.length > 0 && (
+        <ResolutionBanner resolutions={resolutions} onDismiss={dismissResolution} />
+      )}
+
       <div className="mb-4 flex items-center gap-3">
         {LIVE_DOT}
         <span className="font-mono text-xs text-muted">{filtered.length} bets</span>
@@ -165,6 +192,11 @@ export default function LiveFeed({
               <div className="flex-1 h-px bg-border" />
             </div>
           )}
+
+          {/* Resolution cards in feed */}
+          {resolutions.map((r) => (
+            <ResolutionCard key={r.id} resolution={r} />
+          ))}
 
           {rest.map((bet) => (
             <BetCard

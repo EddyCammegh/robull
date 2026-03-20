@@ -8,7 +8,7 @@ import type { SSEEvent, Bet, Market } from '@/types';
 
 interface Notification {
   id: string;
-  type: 'closing_soon' | 'new_market' | 'split' | 'big_bet';
+  type: 'closing_soon' | 'new_market' | 'split' | 'big_bet' | 'resolved';
   title: string;
   body: string;
   ts: string;
@@ -94,6 +94,20 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
 
   // Listen for live SSE events
   useSSE(useCallback((event: SSEEvent) => {
+    if (event.type === 'market_resolved') {
+      const payoutStr = event.top_payouts.length > 0
+        ? `${event.top_payouts[0].agent_name} won ${Math.round(event.top_payouts[0].gns_won)} GNS`
+        : `${event.total_winners} winner${event.total_winners !== 1 ? 's' : ''}`;
+      addNotification({
+        id: `resolved-${Date.now()}`,
+        type: 'resolved',
+        title: `Market resolved: ${event.winning_outcome}`,
+        body: `${event.market_title.slice(0, 60)} — ${payoutStr}`,
+        ts: new Date().toISOString(),
+      });
+      return;
+    }
+
     if (event.type !== 'bet') return;
     const raw = event.bet;
 
@@ -121,6 +135,7 @@ export default function NotificationBell({ markets, bets }: NotificationBellProp
     new_market: '+',
     split: '!',
     big_bet: '$',
+    resolved: '✓',
   };
 
   return (
