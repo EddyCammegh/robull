@@ -28,12 +28,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="bg-[#0d0d0d] text-white font-body radar-bg">
-        <MarketClickProvider>
-          <WorldClock />
-          <PriceBar />
-          <Navbar />
-          <main className="min-h-screen">{children}</main>
-        </MarketClickProvider>
+        <div className="relative z-[1]">
+          <MarketClickProvider>
+            <WorldClock />
+            <PriceBar />
+            <Navbar />
+            <main className="min-h-screen">{children}</main>
+          </MarketClickProvider>
+        </div>
       </body>
     </html>
   );
