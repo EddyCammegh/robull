@@ -84,44 +84,51 @@ WHERE name IN ('CASSANDRA', 'BAYES', 'PYTHIA', 'MOMENTUM', 'GAMBLER', 'NEXUS-GPT
 -- Resolve expired STANDALONE markets on every deploy (never touch child markets)
 UPDATE markets SET resolved = true WHERE closes_at < NOW() AND resolved = false AND event_id IS NULL;
 
--- Fix: un-resolve child markets that were incorrectly resolved by quality/close filters.
--- Child markets are managed by event sync, not standalone cleanup.
-UPDATE markets SET resolved = false, updated_at = NOW()
-WHERE event_id IS NOT NULL AND resolved = true AND winning_outcome IS NULL;
-
 -- Fix: force re-initialisation of event quantities in correct polymarket_id order.
--- Reset active_agent_count so sync will re-bootstrap quantities.
 UPDATE events SET quantities = NULL, active_agent_count = 0
 WHERE active_agent_count = 0;
 
--- Remove SPORTS, ENTERTAINMENT, OTHER markets and events permanently
-UPDATE markets SET resolved = true, updated_at = NOW()
-WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER');
-
+-- Remove SPORTS, ENTERTAINMENT, OTHER events and their child markets permanently
 UPDATE events SET resolved = true, updated_at = NOW()
 WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER');
 
--- Remove F1 markets even if categorised under allowed categories
 UPDATE markets SET resolved = true, updated_at = NOW()
-WHERE resolved = false AND (question ~* '\mF1\M' OR question ILIKE '%Formula 1%' OR question ILIKE '%Formula One%' OR question ILIKE '%Grand Prix%');
+WHERE category IN ('SPORTS', 'ENTERTAINMENT', 'OTHER') AND event_id IS NULL;
+
+-- Remove F1 markets/events
+UPDATE markets SET resolved = true, updated_at = NOW()
+WHERE resolved = false AND event_id IS NULL
+  AND (question ~* '\mF1\M' OR question ILIKE '%Formula 1%' OR question ILIKE '%Formula One%' OR question ILIKE '%Grand Prix%');
 
 UPDATE events SET resolved = true, updated_at = NOW()
-WHERE resolved = false AND (title ~* '\mF1\M' OR title ILIKE '%Formula 1%' OR title ILIKE '%Formula One%' OR title ILIKE '%Grand Prix%');
+WHERE resolved = false
+  AND (title ~* '\mF1\M' OR title ILIKE '%Formula 1%' OR title ILIKE '%Formula One%' OR title ILIKE '%Grand Prix%');
 
--- Fix: clear sentinel winning_outcome=-1 from valid markets in allowed categories
+-- Clear sentinel winning_outcome=-1 from allowed-category markets
 UPDATE markets SET resolved = false, winning_outcome = NULL, updated_at = NOW()
 WHERE winning_outcome = -1
   AND category IN ('POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH');
 
--- Fix: un-resolve valid markets in allowed categories that were incorrectly resolved
+-- Un-resolve valid standalone markets in allowed categories
 UPDATE markets SET resolved = false, updated_at = NOW()
 WHERE category IN ('POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH')
+  AND event_id IS NULL
   AND winning_outcome IS NULL
   AND closes_at > NOW();
 
+-- Un-resolve valid events in allowed categories
 UPDATE events SET resolved = false, updated_at = NOW()
 WHERE category IN ('POLITICS', 'CRYPTO', 'MACRO', 'AI/TECH')
   AND winning_outcome_label IS NULL;
+
+-- LAST: un-resolve child markets of active events that were incorrectly resolved.
+-- Uses parent event's resolved status as the authority, not the child's category.
+UPDATE markets SET resolved = false, updated_at = NOW()
+WHERE event_id IS NOT NULL
+  AND resolved = true
+  AND winning_outcome IS NULL
+  AND closes_at > NOW()
+  AND event_id IN (SELECT id FROM events WHERE resolved = false);
 
 -- Event title for sports match context (e.g. "Nashville SC vs. Orlando City SC")
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS event_title TEXT;
