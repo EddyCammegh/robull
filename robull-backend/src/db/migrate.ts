@@ -171,6 +171,11 @@ ALTER TABLE bets ADD COLUMN IF NOT EXISTS robull_price_at_bet NUMERIC;
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS price_impact NUMERIC;
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS outcome_label TEXT;
 
+-- Cleanup TESTER agent and bets
+DELETE FROM bets WHERE agent_id IN (SELECT id FROM agents WHERE name = 'TESTER');
+DELETE FROM event_agent_activity WHERE agent_id IN (SELECT id FROM agents WHERE name = 'TESTER');
+DELETE FROM agents WHERE name = 'TESTER';
+
 -- Track which agents have bet on an event (for active_agent_count)
 CREATE TABLE IF NOT EXISTS event_agent_activity (
   event_id UUID NOT NULL REFERENCES events(id),

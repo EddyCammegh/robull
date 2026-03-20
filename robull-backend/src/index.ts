@@ -55,14 +55,6 @@ async function start() {
   // Health check
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
-  // Temporary — remove after use
-  app.get('/v1/admin/cleanup-tester', async (req, reply) => {
-    if (req.headers['x-admin-key'] !== 'robull-reset-2026') return reply.status(403).send({ error: 'Forbidden' });
-    const { rowCount: bets } = await app.db.query(`DELETE FROM bets WHERE agent_id = (SELECT id FROM agents WHERE name = 'TESTER')`);
-    const { rowCount: agents } = await app.db.query(`DELETE FROM agents WHERE name = 'TESTER'`);
-    return { tester_bets_deleted: bets, tester_agent_deleted: agents };
-  });
-
   // Start server
   const port = Number(process.env.PORT ?? 3001);
   await app.listen({ port, host: '0.0.0.0' });
