@@ -104,6 +104,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
              closes_at      = EXCLUDED.closes_at,
              event_id       = EXCLUDED.event_id,
              outcome_label  = EXCLUDED.outcome_label,
+             initial_probs  = EXCLUDED.initial_probs,
              resolved       = false,
              updated_at     = NOW()
            `,
@@ -142,18 +143,17 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         eventType = 'mutually_exclusive';
       }
 
-      // Always (re)initialise event-level LMSR quantities if active_agent_count is 0
+      // Re-initialise event LMSR from current Polymarket prices when no agents have bet.
+      // Once agents bet (active_agent_count > 0), preserve agent-driven price discovery.
       const { rows: [evtState] } = await db.query(
-        'SELECT quantities, active_agent_count FROM events WHERE id = $1',
+        'SELECT active_agent_count FROM events WHERE id = $1',
         [eventId]
       );
-      const parsedQuantities = parseNumericArray(evtState.quantities);
-      const hasQuantities = parsedQuantities.length > 0 && parsedQuantities.some((q) => q !== 0 && !isNaN(q));
       const hasAgentActivity = Number(evtState.active_agent_count ?? 0) > 0;
 
-      if (!hasQuantities || !hasAgentActivity) {
+      if (!hasAgentActivity) {
+        // No bets yet — sync quantities from current Polymarket prices
         if (eventType === 'mutually_exclusive') {
-          // Multi-outcome LMSR: probabilities sum to 1.0
           const BASE_B = 200;
           const eventQuantities = bootstrapEventQuantities(childProbs, BASE_B);
           await db.query(
@@ -161,14 +161,14 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
             [eventQuantities, BASE_B, eventId, eventType]
           );
         } else {
-          // Independent or sports_props: no event-level quantities, each child uses its own binary LMSR
+          // Independent or sports_props: no event-level quantities
           await db.query(
             `UPDATE events SET quantities = NULL, event_type = $2, active_agent_count = 0 WHERE id = $1`,
             [eventId, eventType]
           );
         }
       } else {
-        // Just update event_type if it changed
+        // Agents have bet — only update event_type, never touch quantities
         await db.query(
           `UPDATE events SET event_type = $1 WHERE id = $2`,
           [eventType, eventId]
