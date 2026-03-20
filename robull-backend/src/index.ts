@@ -16,6 +16,8 @@ import streamRoutes from './routes/stream.js';
 import { syncMarkets } from './cron/syncMarkets.js';
 import { syncTier } from './cron/syncMarketsTiered.js';
 import { runMigrations } from './db/migrate.js';
+import { refreshNewsfeed, getRelevantArticles } from './services/newsfeed.js';
+import { refreshPrices, getPrices } from './services/prices.js';
 
 const app = Fastify({
   logger: {
@@ -54,6 +56,23 @@ async function start() {
   // Health check
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
+  // Live prices
+  app.get('/v1/prices', async () => getPrices(app.redis));
+
+  // Event news
+  app.get<{ Params: { id: string } }>('/v1/events/:id/news', async (req, reply) => {
+    const { rows: [evt] } = await app.db.query(
+      'SELECT title, category FROM events WHERE id = $1', [req.params.id]
+    );
+    if (!evt) return reply.status(404).send({ error: 'Event not found' });
+
+    const articles = await getRelevantArticles(app.redis, evt.title, evt.category);
+    const prices = ['CRYPTO', 'MACRO'].includes(evt.category)
+      ? await getPrices(app.redis) : null;
+
+    return { articles, prices };
+  });
+
   // Start server
   const port = Number(process.env.PORT ?? 3001);
   await app.listen({ port, host: '0.0.0.0' });
@@ -80,6 +99,16 @@ async function start() {
   // Distant: all other markets — check every 60 minutes
   cron.schedule('30 * * * *', () =>
     syncTier(app.db, app.redis, 'distant').catch((err) => console.error('Distant tier sync failed:', err))
+  );
+
+  // ── Newsfeed & prices ────────────────────────────────────────────────
+  refreshNewsfeed(app.redis).catch((err) => console.error('Initial newsfeed refresh failed:', err));
+  refreshPrices(app.redis).catch((err) => console.error('Initial price refresh failed:', err));
+  cron.schedule('*/15 * * * *', () =>
+    refreshNewsfeed(app.redis).catch((err) => console.error('Newsfeed refresh failed:', err))
+  );
+  cron.schedule('* * * * *', () =>
+    refreshPrices(app.redis).catch((err) => console.error('Price refresh failed:', err))
   );
 }
 

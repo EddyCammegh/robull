@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import WorldClock from '@/components/WorldClock';
+import PriceBar from '@/components/PriceBar';
 import { MarketClickProvider } from '@/components/MarketClickProvider';
 
 export const metadata: Metadata = {
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-background text-white font-body">
         <MarketClickProvider>
           <WorldClock />
+          <PriceBar />
           <Navbar />
           <main className="min-h-screen">{children}</main>
         </MarketClickProvider>

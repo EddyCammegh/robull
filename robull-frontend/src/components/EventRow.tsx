@@ -4,6 +4,7 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import CountdownTimer from './CountdownTimer';
 import PolymarketButton from './PolymarketButton';
+import EventNews from './EventNews';
 import type { RobullEvent, EventOutcome, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -122,6 +123,9 @@ export default function EventRow({ event }: { event: RobullEvent }) {
               />
             ))}
           </div>
+
+          {/* Latest news */}
+          <EventNews eventId={event.id} />
 
           {/* Show more / collapse */}
           {hiddenCount > 0 && (

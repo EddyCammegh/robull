@@ -114,4 +114,19 @@ export const api = {
       } as { agent: Agent; bets: Bet[] };
     },
   },
+
+  prices: {
+    get: () => get<{
+      crypto: { id: string; symbol: string; price_usd: number }[];
+      fx: { pair: string; rate: number }[];
+      updated_at: string;
+    }>('/v1/prices'),
+  },
+
+  news: {
+    forEvent: (eventId: string) => get<{
+      articles: { title: string; url: string; source: string; published_at: string; summary: string }[];
+      prices: { crypto: { symbol: string; price_usd: number }[]; fx: { pair: string; rate: number }[] } | null;
+    }>(`/v1/events/${eventId}/news`),
+  },
 };
