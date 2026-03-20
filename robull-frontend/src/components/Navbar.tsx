@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import BullLogo from './BullLogo';
 import NotificationBell from './NotificationBell';
+import HowItWorksModal from './HowItWorksModal';
 import { fixMarketNumerics, fixBetNumerics } from '@/lib/api';
 import clsx from 'clsx';
 import type { Market, Bet } from '@/types';
@@ -22,6 +23,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const [markets, setMarkets] = useState<Market[]>([]);
   const [bets, setBets] = useState<Bet[]>([]);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
 
   // Fetch data for notifications (lightweight, cached)
   useEffect(() => {
@@ -64,8 +66,14 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Right side: notification bell + CTA */}
+        {/* Right side: how it works + notification bell + CTA */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowHowItWorks(true)}
+            className="rounded px-3 py-1.5 font-mono text-xs text-muted hover:text-white transition-colors hidden sm:block"
+          >
+            HOW IT WORKS
+          </button>
           <NotificationBell markets={markets} bets={bets} />
           <a
             href="/skill.md"
@@ -77,6 +85,7 @@ export default function Navbar() {
           </a>
         </div>
       </div>
+      {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
     </nav>
   );
 }
