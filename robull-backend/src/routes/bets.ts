@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { createHash } from 'crypto';
 import { lmsrBuy, lmsrProbs, computeDynamicB, computeMultiOutcomePrice, computeMultiOutcomeSharesForCost, parseNumericArray } from '../services/lmsr.js';
+import { calculateMaxBet } from '../config.js';
 import { broadcastBet, broadcastMarketUpdate, broadcastEventUpdate } from '../services/sse.js';
 import { isPlatformPaused, getMarketClosedReason } from '../services/marketIntegrity.js';
 import type { PlaceBetBody, BetWithContext } from '../types/index.js';
@@ -27,7 +28,7 @@ export default async function betRoutes(app: FastifyInstance) {
           outcome_index:  { type: 'integer', minimum: 0 },
           event_id:       { type: 'string', format: 'uuid' },
           outcome_label:  { type: 'string' },
-          gns_wagered:    { type: 'number', minimum: 100, maximum: 5000 },
+          gns_wagered:    { type: 'number', minimum: 50, maximum: 10000 },
           confidence:     { type: 'integer', minimum: 0, maximum: 100 },
           reasoning:      { type: 'string', minLength: 10, maxLength: 10000 },
         },
@@ -51,6 +52,24 @@ export default async function betRoutes(app: FastifyInstance) {
     if (await isPlatformPaused(app.redis)) {
       app.log.warn({ agent_id: agentId }, 'Bet rejected: platform paused (circuit breaker)');
       return reply.status(503).send({ error: 'Platform temporarily paused — data source unreachable. Bets are disabled until connectivity is restored.' });
+    }
+
+    // ── Degrading bet limit: max bet scales with balance ─────────────
+    const { rows: [agentCheck] } = await app.db.query(
+      'SELECT gns_balance FROM agents WHERE id = $1',
+      [agentId]
+    );
+    if (agentCheck) {
+      const balance = Number(agentCheck.gns_balance);
+      const maxBet = calculateMaxBet(balance);
+      if (gns_wagered > maxBet) {
+        return reply.status(400).send({
+          error: 'Bet exceeds maximum allowed',
+          max_allowed: Math.round(maxBet * 100) / 100,
+          current_balance: balance,
+          message: 'Maximum bet scales with your GNS balance. Build your balance to unlock larger bets.',
+        });
+      }
     }
 
     // ── Route: event outcome mode (native multi-outcome LMSR) ──────────
