@@ -144,38 +144,41 @@ export default function EventRow({ event }: { event: RobullEvent }) {
 function OutcomeBar({ outcome, index, isIndependent, maxProb }: {
   outcome: EventOutcome; index: number; isIndependent: boolean; maxProb: number;
 }) {
-  const expired = outcome.passed;
+  const passed = outcome.passed;
 
   const barWidth = isIndependent
     ? `${outcome.probability * 100}%`
     : maxProb > 0 ? `${(outcome.probability / maxProb) * 100}%` : '0%';
 
-  const barColor = expired
-    ? '#222222'
+  const barColor = passed
+    ? '#444444'
     : isIndependent
     ? '#60a5fa'
     : index === 0 ? '#ff4400' : index === 1 ? '#cc3600' : '#555555';
 
   return (
-    <div className={clsx('flex items-center gap-3', expired && 'opacity-40')}>
+    <div className="flex items-center gap-3">
       <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
-        {expired ? '—' : `${(outcome.probability * 100).toFixed(1)}%`}
+        {`${(outcome.probability * 100).toFixed(1)}%`}
       </span>
       <div className="flex-1 h-4 rounded bg-subtle overflow-hidden relative">
         <div
           className="h-full rounded transition-all duration-500"
-          style={{ width: expired ? '0%' : barWidth, background: barColor }}
+          style={{ width: barWidth, background: barColor }}
         />
-        <span className={clsx(
-          'absolute inset-0 flex items-center px-2 font-mono text-[10px] font-medium truncate',
-          expired ? 'text-muted' : 'text-white'
-        )}>
-          {outcome.label} {expired && '· PASSED'}
+        <span className="absolute inset-0 flex items-center px-2 font-mono text-[10px] font-medium truncate text-white">
+          {outcome.label}
         </span>
       </div>
-      <span className="font-mono text-[10px] text-muted flex-shrink-0 w-14 text-right hidden sm:block">
-        {expired ? '' : `$${(outcome.volume / 1000).toFixed(0)}K`}
-      </span>
+      {passed ? (
+        <span className="rounded bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-400 flex-shrink-0">
+          PASSED
+        </span>
+      ) : (
+        <span className="font-mono text-[10px] text-muted flex-shrink-0 w-14 text-right hidden sm:block">
+          ${(outcome.volume / 1000).toFixed(0)}K
+        </span>
+      )}
     </div>
   );
 }
