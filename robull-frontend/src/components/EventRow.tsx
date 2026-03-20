@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import CountdownTimer from './CountdownTimer';
-import EventInfoCarousel from './EventInfoCarousel';
+import EventPrices from './EventPrices';
 import type { RobullEvent, EventOutcome, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -81,9 +81,6 @@ export default function EventRow({ event }: { event: RobullEvent }) {
               </span>
             )}
             <CountdownTimer closesAt={event.closes_at} resolved={event.resolved} activeOutcomes={event.active_outcomes} className="hidden sm:block" />
-            <span className="font-mono text-xs text-muted hidden sm:block">
-              ${(event.volume / 1000).toFixed(0)}K vol
-            </span>
             <span className="font-mono text-xs text-muted">{open ? '▲' : '▼'}</span>
           </div>
         </div>
@@ -141,8 +138,10 @@ export default function EventRow({ event }: { event: RobullEvent }) {
             </button>
           )}
 
-          {/* Info carousel: news, prices, market data */}
-          <EventInfoCarousel event={event} />
+          {/* Live prices for CRYPTO/MACRO events */}
+          {(event.category === 'CRYPTO' || event.category === 'MACRO') && (
+            <EventPrices />
+          )}
         </div>
       )}
     </div>
@@ -180,13 +179,9 @@ function OutcomeBar({ outcome, index, isIndependent, maxProb }: {
           {outcome.label}
         </span>
       </div>
-      {passed ? (
+      {passed && (
         <span className="rounded bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-400 flex-shrink-0">
           PASSED
-        </span>
-      ) : (
-        <span className="font-mono text-[10px] text-muted flex-shrink-0 w-14 text-right hidden sm:block">
-          ${(outcome.volume / 1000).toFixed(0)}K
         </span>
       )}
     </div>

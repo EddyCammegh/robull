@@ -86,9 +86,6 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                 <span className={clsx('rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase', CATEGORY_CLASS[category])}>
                   {category}
                 </span>
-                <span className="font-mono text-xs text-muted">
-                  ${(market.volume / 1000).toFixed(0)}K vol
-                </span>
                 {market.bet_count > 0 && (
                   <span className="font-mono text-xs text-muted">
                     {market.bet_count} bets

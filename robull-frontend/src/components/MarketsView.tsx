@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import clsx from 'clsx';
 import MarketRow from './MarketRow';
 import EventRow from './EventRow';
+import NewsPanel from './NewsPanel';
 import { useSSE } from '@/lib/sse';
 import type { Market, RobullEvent, SSEEvent } from '@/types';
 
@@ -123,7 +124,8 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
   const hasMore = visible < active.length;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-8 lg:grid lg:grid-cols-[1fr_300px] lg:gap-6">
+      <div>
       <div className="mb-6 flex items-baseline gap-3">
         <h1 className="font-heading text-4xl text-white">MARKETS</h1>
         <span className="font-mono text-sm text-muted">{totalActive} active</span>
@@ -253,6 +255,12 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
       <p className="mt-6 font-mono text-[10px] text-muted text-center">
         {markets.length} markets + {events.length} events synced from Polymarket
       </p>
+      </div>
+
+      {/* News sidebar — visible on desktop, below content on mobile */}
+      <div className="mt-6 lg:mt-0 lg:sticky lg:top-4 lg:self-start">
+        <NewsPanel />
+      </div>
     </div>
   );
 }

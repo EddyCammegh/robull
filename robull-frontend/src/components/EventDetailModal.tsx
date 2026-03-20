@@ -103,9 +103,6 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
                 )}>
                   {event.event_type === 'sports_props' ? 'GAME PROPS' : isIndependent ? 'INDEPENDENT' : 'PICK ONE'}
                 </span>
-                <span className="font-mono text-xs text-muted">
-                  ${(event.volume / 1000).toFixed(0)}K vol
-                </span>
                 <CountdownTimer closesAt={event.closes_at} resolved={event.resolved} activeOutcomes={event.active_outcomes} />
               </div>
               <h2 className="font-heading text-2xl text-white leading-tight">{event.title}</h2>
@@ -137,13 +134,9 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
                       {o.label}
                     </span>
                   </div>
-                  {o.passed ? (
+                  {o.passed && (
                     <span className="rounded bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-400 flex-shrink-0">
                       PASSED
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[10px] text-muted flex-shrink-0 w-14 text-right">
-                      ${(o.volume / 1000).toFixed(0)}K
                     </span>
                   )}
                 </div>

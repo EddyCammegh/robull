@@ -183,9 +183,6 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
             ) : (
               <CountdownTimer closesAt={market.closes_at} resolved={market.resolved} className="hidden sm:block" />
             )}
-            <span className="font-mono text-xs text-muted hidden sm:block">
-              ${(market.volume / 1000).toFixed(0)}K vol
-            </span>
             <span className="font-mono text-xs text-muted">{open ? '▲' : '▼'}</span>
           </div>
         </div>
