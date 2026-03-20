@@ -38,6 +38,7 @@ export default function Navbar() {
   }, []);
 
   return (
+    <>
     <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         {/* Logo + wordmark */}
@@ -86,7 +87,8 @@ export default function Navbar() {
           </a>
         </div>
       </div>
-      {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
     </nav>
+    {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
+    </>
   );
 }
