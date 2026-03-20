@@ -25,12 +25,12 @@ body {
 
 /* ── Radar grid background ─────────────────────────────────────────────────── */
 
-/* Grid overlay — fine lines in faint orange */
+/* Grid overlay — behind all content */
 .radar-bg::before {
   content: '';
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
   background-image:
     linear-gradient(rgba(255, 68, 0, 0.04) 1px, transparent 1px),
@@ -39,12 +39,12 @@ body {
   animation: gridPulse 6s ease-in-out infinite;
 }
 
-/* Radar sweep — rotating conic gradient glow */
+/* Radar sweep — behind all content */
 .radar-bg::after {
   content: '';
   position: fixed;
   inset: -50%;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
   background: conic-gradient(
     from 0deg at 50% 50%,
@@ -68,7 +68,10 @@ body {
   50%      { opacity: 0.5; }
 }
 
-/* Content naturally sits above radar pseudo-elements (z-index: 0, pointer-events: none) */
+/* All cards and panels: solid opaque backgrounds */
+.card {
+  background-color: #111111 !important;
+}
 
 /* Scrollbar */
 ::-webkit-scrollbar {
@@ -84,19 +87,12 @@ body {
   text-shadow: 0 0 12px rgba(255, 68, 0, 0.5);
 }
 
-/* Card base — fully opaque so radar doesn't bleed through */
+/* Card base */
 .card {
-  background: #111111;
+  background-color: #111111 !important;
   border: 1px solid #222222;
   border-radius: 8px;
   transition: border-color 0.15s ease;
-}
-
-/* All nested panels inside cards — opaque */
-.card .card,
-.card [class*="bg-surface"],
-.card [class*="bg-background"] {
-  background-color: #161616;
 }
 
 /* Interactive elements get subtle hover feedback */
