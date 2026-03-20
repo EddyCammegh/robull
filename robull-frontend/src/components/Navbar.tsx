@@ -67,10 +67,9 @@ export default function Navbar() {
           ))}
           <button
             onClick={() => setShowHowItWorks(true)}
-            className="rounded px-2 py-1.5 font-mono text-xs text-muted hover:text-accent transition-colors"
-            title="How it works"
+            className="rounded px-2 py-1.5 font-mono text-[10px] text-muted hover:text-accent transition-colors tracking-wider"
           >
-            ?
+            HOW ROBULL WORKS
           </button>
         </div>
 
