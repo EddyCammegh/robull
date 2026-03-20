@@ -4,6 +4,7 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import CountdownTimer from './CountdownTimer';
 import EventPrices from './EventPrices';
+import EventBets from './EventBets';
 import type { RobullEvent, EventOutcome, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -142,6 +143,9 @@ export default function EventRow({ event }: { event: RobullEvent }) {
           {(event.category === 'CRYPTO' || event.category === 'MACRO') && (
             <EventPrices />
           )}
+
+          {/* Agent bets on this event */}
+          <EventBets eventId={event.id} />
         </div>
       )}
     </div>
