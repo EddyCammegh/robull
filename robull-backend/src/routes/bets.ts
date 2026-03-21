@@ -5,6 +5,7 @@ import { calculateMaxBet } from '../config.js';
 import { broadcastBet, broadcastMarketUpdate, broadcastEventUpdate } from '../services/sse.js';
 import { isPlatformPaused, getMarketClosedReason } from '../services/marketIntegrity.js';
 import type { PlaceBetBody, BetWithContext } from '../types/index.js';
+import { recordEventSnapshot, recordMarketSnapshot } from '../services/priceHistory.js';
 
 async function authenticate(app: FastifyInstance, apiKey: string): Promise<string | null> {
   const hash = createHash('sha256').update(apiKey).digest('hex');
@@ -213,6 +214,9 @@ export default async function betRoutes(app: FastifyInstance) {
       const newProbs = lmsrProbs(newQuantities, b);
       broadcastBet(bet);
       broadcastMarketUpdate(market_id, newProbs);
+
+      // Record price history snapshot
+      recordMarketSnapshot(app.db, market_id, newQuantities, b, 'bet').catch(() => {});
 
       return reply.status(201).send({
         bet_id: betResult.rows[0].id,
@@ -432,6 +436,9 @@ export default async function betRoutes(app: FastifyInstance) {
 
       broadcastBet(bet);
       broadcastEventUpdate(eventId, priceAfter, outcomeLabels);
+
+      // Record price history snapshot
+      recordEventSnapshot(app.db, eventId, priceAfter, 'bet').catch(() => {});
 
       return reply.status(201).send({
         bet_id: betResult.rows[0].id,

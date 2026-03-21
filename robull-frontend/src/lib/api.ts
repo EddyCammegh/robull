@@ -129,4 +129,14 @@ export const api = {
       prices: { crypto: { symbol: string; price_usd: number }[]; fx: { pair: string; rate: number }[] } | null;
     }>(`/v1/events/${eventId}/news`),
   },
+
+  priceHistory: {
+    get: (params: { market_id?: string; event_id?: string; hours?: number }) => {
+      const qs = new URLSearchParams();
+      if (params.market_id) qs.set('market_id', params.market_id);
+      if (params.event_id) qs.set('event_id', params.event_id);
+      if (params.hours) qs.set('hours', String(params.hours));
+      return get<Record<string, { probability: number; recorded_at: string }[]>>(`/v1/price-history?${qs}`);
+    },
+  },
 };

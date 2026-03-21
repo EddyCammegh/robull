@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import clsx from 'clsx';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
+import SparklineChart from './SparklineChart';
 import BetThread from './BetThread';
 import type { Bet, MarketCategory } from '@/types';
 
@@ -51,6 +52,8 @@ interface EventDetailModalProps {
   onClose: () => void;
 }
 
+const BAR_TOP_N = 8;
+
 export default function EventDetailModal({ event, loading, onClose }: EventDetailModalProps) {
   const category = event.category as MarketCategory;
   const bets = event.bets ?? [];
@@ -68,6 +71,10 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
   });
 
   const maxProb = sorted.length > 0 ? sorted[0].probability : 1;
+  const activeOutcomes = sorted.filter(o => !o.passed);
+  const showTopN = activeOutcomes.length > BAR_TOP_N;
+  const barOutcomes = showTopN ? sorted.slice(0, BAR_TOP_N) : sorted;
+  const hiddenBarCount = showTopN ? sorted.length - BAR_TOP_N : 0;
 
   // Group bets by outcome_label
   const betsByOutcome: Record<string, Bet[]> = {};
@@ -107,9 +114,34 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
             <button onClick={onClose} className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white hover:bg-subtle/50 text-lg font-mono transition-colors">x</button>
           </div>
 
-          {/* Outcome bars */}
-          <div className="mt-4 space-y-1.5">
-            {sorted.map((o) => {
+          {/* Sparklines per outcome (top outcomes) */}
+          <div className="mt-4 space-y-2">
+            <p className="font-mono text-[10px] text-muted uppercase tracking-widest">Probability trends</p>
+            {activeOutcomes.slice(0, 6).map((o, i) => (
+              <div key={o.market_id} className="flex items-center gap-3">
+                <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
+                  {(o.probability * 100).toFixed(1)}%
+                </span>
+                <span className="font-mono text-[10px] text-muted w-28 truncate flex-shrink-0">
+                  {o.label}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <SparklineChart
+                    currentValue={o.probability}
+                    height={32}
+                    color={i === 0 ? '#FF4400' : '#666666'}
+                    showAxes={false}
+                    label={o.label}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Bar chart snapshot */}
+          <div className="mt-5 space-y-1.5">
+            <p className="font-mono text-[10px] text-muted uppercase tracking-widest">Current snapshot</p>
+            {barOutcomes.map((o) => {
               const barWidth = isIndependent
                 ? `max(4px, ${o.probability * 100}%)`
                 : maxProb > 0 ? `max(4px, ${(o.probability / maxProb) * 100}%)` : '0%';
@@ -134,6 +166,11 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
                 </div>
               );
             })}
+            {hiddenBarCount > 0 && (
+              <p className="font-mono text-[10px] text-muted text-center pt-1">
+                +{hiddenBarCount} more outcomes
+              </p>
+            )}
           </div>
         </div>
 
@@ -161,4 +198,3 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
     </div>
   );
 }
-

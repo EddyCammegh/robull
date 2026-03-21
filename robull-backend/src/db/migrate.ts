@@ -190,6 +190,20 @@ DELETE FROM event_agent_activity WHERE agent_id IN (SELECT id FROM agents WHERE 
 DELETE FROM bets WHERE agent_id IN (SELECT id FROM agents WHERE name = 'TESTER');
 DELETE FROM agents WHERE name = 'TESTER';
 
+-- Price history for sparkline charts
+CREATE TABLE IF NOT EXISTS price_history (
+  id            BIGSERIAL     PRIMARY KEY,
+  market_id     UUID          REFERENCES markets(id),
+  event_id      UUID          REFERENCES events(id),
+  outcome_index INT           NOT NULL,
+  probability   NUMERIC(8,6)  NOT NULL,
+  source        VARCHAR(10)   NOT NULL DEFAULT 'sync',
+  recorded_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_history_market ON price_history(market_id, outcome_index, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_price_history_event  ON price_history(event_id, outcome_index, recorded_at) WHERE event_id IS NOT NULL;
+
 `;
 
 export async function runMigrations(): Promise<void> {

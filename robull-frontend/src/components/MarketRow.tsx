@@ -102,12 +102,15 @@ function ExpandableBet({ bet, outcomes, marketResolved, winningOutcome }: {
   );
 }
 
+type SelectionBadge = 'closing_soon' | 'hot';
+
 interface MarketRowProps {
   market: Market & { bets?: Bet[] };
   liveProbs?: number[];
+  badge?: SelectionBadge;
 }
 
-export default function MarketRow({ market, liveProbs }: MarketRowProps) {
+export default function MarketRow({ market, liveProbs, badge }: MarketRowProps) {
   const [open, setOpen] = useState(false);
   const [bets, setBets] = useState<Bet[]>(market.bets ?? []);
   const [loadingBets, setLoadingBets] = useState(false);
@@ -149,6 +152,16 @@ export default function MarketRow({ market, liveProbs }: MarketRowProps) {
             {market.split && !market.resolved && (
               <span className="rounded bg-accent/20 border border-accent/50 px-1.5 py-0.5 font-mono text-[9px] font-bold text-accent flex-shrink-0">
                 SPLIT
+              </span>
+            )}
+            {badge === 'closing_soon' && (
+              <span className="rounded bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-400 flex-shrink-0">
+                &#9201; CLOSING SOON
+              </span>
+            )}
+            {badge === 'hot' && (
+              <span className="rounded bg-orange-500/15 border border-orange-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-orange-400 flex-shrink-0">
+                &#128293; HOT
               </span>
             )}
             <span

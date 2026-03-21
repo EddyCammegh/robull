@@ -4,6 +4,7 @@ import { fetchPolymarkets, classifyCategory, isLowQualityMarket, isExcludedCateg
 import { recordApiSuccess, recordApiFailure, enforceCloseBuffer, checkEventResolution } from '../services/marketIntegrity.js';
 import { bootstrapEventQuantities, parseNumericArray } from '../services/lmsr.js';
 import { processMarketPayouts } from '../services/payouts.js';
+import { recordAllEventSnapshots } from '../services/priceHistory.js';
 
 async function logCategoryCounts(db: Pool, label: string): Promise<void> {
   const { rows } = await db.query(
@@ -348,6 +349,12 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         [excess]
       );
       console.log(`[cron] Trimmed ${excess} lowest-volume standalone markets (${activeCount} → ${TARGET_ACTIVE}).`);
+    }
+
+    // Record price history snapshots for sparkline charts
+    const snapshots = await recordAllEventSnapshots(db).catch(() => 0);
+    if (snapshots > 0) {
+      console.log(`[cron] Recorded price snapshots for ${snapshots} events.`);
     }
 
     await logCategoryCounts(db, 'After sync');
