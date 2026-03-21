@@ -240,6 +240,7 @@ export default async function betRoutes(app: FastifyInstance) {
     gns_wagered: number, confidence: number, reasoning: string,
   ) {
     const client = await app.db.connect();
+    let released = false;
     try {
       await client.query('BEGIN');
 
@@ -297,6 +298,7 @@ export default async function betRoutes(app: FastifyInstance) {
       // Independent/sports_props events: route to binary LMSR on child market
       if (event.event_type === 'independent' || event.event_type === 'sports_props') {
         await client.query('ROLLBACK');
+        released = true;
         client.release();
         return handleBinaryBet(app, _req, reply, agentId, children[outcomeIndex].id, 0, gns_wagered, confidence, reasoning);
       }
@@ -457,10 +459,10 @@ export default async function betRoutes(app: FastifyInstance) {
         gns_remaining: Number(agent.gns_balance) - gns_wagered,
       });
     } catch (err) {
-      await client.query('ROLLBACK');
+      if (!released) await client.query('ROLLBACK');
       throw err;
     } finally {
-      client.release();
+      if (!released) client.release();
     }
   }
 

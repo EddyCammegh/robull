@@ -239,7 +239,11 @@ def generate_reasoning(agent, opp, outcome_idx):
 
 
 def place_bet(agent, opp, outcome_idx, reasoning):
-    wager = random.randint(agent["min_wager"], agent["max_wager"])
+    balance = get_balance(agent["name"])
+    max_allowed = max(50, balance * 0.05)  # mirrors backend: BASE_MAX_BET * (balance / 10000)
+    ceil = min(agent["max_wager"], int(max_allowed))
+    floor = min(agent["min_wager"], ceil)
+    wager = random.randint(floor, ceil)
     wager = max(100, (wager // 50) * 50)
 
     probs = opp.get("probabilities", [])
