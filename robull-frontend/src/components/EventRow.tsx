@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import CountdownTimer from './CountdownTimer';
-import SparklineChart from './SparklineChart';
 import EventPrices from './EventPrices';
 import EventBets from './EventBets';
+import { api } from '@/lib/api';
+import { getChartType, type ChartType } from '@/lib/chartDecision';
 import type { RobullEvent, EventOutcome, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -20,12 +21,24 @@ const CATEGORY_CLASS: Record<MarketCategory, string> = {
 
 const INITIAL_VISIBLE = 12;
 const LOAD_MORE_STEP = 20;
-const BAR_CHART_THRESHOLD = 10; // 10+ outcomes → use bar chart, show top 8
+const LIST_TOP_N = 8;
 
 export default function EventRow({ event, badge }: { event: RobullEvent; badge?: 'closing_soon' | 'hot' }) {
   const [open, setOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const [chartType, setChartType] = useState<ChartType>('bar');
   const category = event.category as MarketCategory;
+
+  // Fetch price history on first expand to determine chart type
+  useEffect(() => {
+    if (!open) return;
+    api.priceHistory.get({ event_id: event.id, hours: 168 }).then((data) => {
+      const decision = getChartType(event, Object.keys(data).length > 0 ? data : null);
+      setChartType(decision.type);
+    }).catch(() => {
+      setChartType(getChartType(event, null).type);
+    });
+  }, [open, event.id]);
 
   const sorted = [...event.outcomes].sort((a, b) => {
     const aExp = a.passed ? 1 : 0;
@@ -41,12 +54,8 @@ export default function EventRow({ event, badge }: { event: RobullEvent; badge?:
   const maxProb = sorted.length > 0 ? sorted[0].probability : 1;
   const typeBadge = event.event_type === 'sports_props' ? 'GAME PROPS' : isIndependent ? 'INDEPENDENT' : 'PICK ONE';
 
-  // Use bar chart for 10+ outcomes, sparklines for fewer
-  const useBarChart = sorted.filter(o => !o.passed).length >= BAR_CHART_THRESHOLD;
-  const barChartMax = 8;
-
-  const shown = useBarChart ? sorted.slice(0, barChartMax) : sorted.slice(0, visibleCount);
-  const hiddenCount = useBarChart ? Math.max(sorted.length - barChartMax, 0) : sorted.length - visibleCount;
+  const shown = chartType === 'list' ? sorted.slice(0, LIST_TOP_N) : sorted.slice(0, visibleCount);
+  const hiddenCount = chartType === 'list' ? Math.max(sorted.length - LIST_TOP_N, 0) : sorted.length - visibleCount;
 
   return (
     <div id={`event-${event.id}`} className="card overflow-hidden">
@@ -115,11 +124,29 @@ export default function EventRow({ event, badge }: { event: RobullEvent; badge?:
             </span>
           </div>
 
-          {/* Outcome sparklines or bar chart */}
-          {useBarChart ? (
+          {/* Outcome display — bar, list, or line (chosen by decision engine) */}
+          {chartType === 'bar' && (
             <div className="space-y-1.5 mb-4">
               {shown.map((outcome, i) => (
                 <OutcomeBar key={outcome.market_id} outcome={outcome} index={i} isIndependent={isIndependent} maxProb={maxProb} />
+              ))}
+            </div>
+          )}
+
+          {chartType === 'list' && (
+            <div className="space-y-1 mb-4">
+              {shown.map((outcome) => (
+                <div key={outcome.market_id} className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
+                    {(outcome.probability * 100).toFixed(1)}%
+                  </span>
+                  <span className="font-mono text-[10px] text-muted">{outcome.label}</span>
+                  {outcome.passed && (
+                    <span className="rounded bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-400 flex-shrink-0">
+                      PASSED
+                    </span>
+                  )}
+                </div>
               ))}
               {hiddenCount > 0 && (
                 <button
@@ -130,16 +157,10 @@ export default function EventRow({ event, badge }: { event: RobullEvent; badge?:
                 </button>
               )}
             </div>
-          ) : (
-            <div className="space-y-2 mb-4">
-              {shown.map((outcome, i) => (
-                <OutcomeSparkline key={outcome.market_id} outcome={outcome} index={i} />
-              ))}
-            </div>
           )}
 
-          {/* Show more / collapse for sparkline mode */}
-          {!useBarChart && hiddenCount > 0 && (
+          {/* Show more / collapse for bar mode */}
+          {chartType === 'bar' && hiddenCount > 0 && (
             <button
               onClick={() => setVisibleCount(v => Math.min(v + LOAD_MORE_STEP, sorted.length))}
               className="mb-4 w-full rounded border border-border py-1.5 font-mono text-[10px] text-muted hover:border-accent hover:text-accent transition-colors"
@@ -147,7 +168,7 @@ export default function EventRow({ event, badge }: { event: RobullEvent; badge?:
               SHOW {Math.min(hiddenCount, LOAD_MORE_STEP)} MORE ({hiddenCount} remaining)
             </button>
           )}
-          {!useBarChart && visibleCount > INITIAL_VISIBLE && (
+          {chartType === 'bar' && visibleCount > INITIAL_VISIBLE && (
             <button
               onClick={() => setVisibleCount(INITIAL_VISIBLE)}
               className="mb-4 w-full rounded border border-border py-1.5 font-mono text-[10px] text-muted hover:border-accent hover:text-accent transition-colors"
@@ -164,33 +185,6 @@ export default function EventRow({ event, badge }: { event: RobullEvent; badge?:
           {/* Agent bets on this event */}
           <EventBets eventId={event.id} />
         </div>
-      )}
-    </div>
-  );
-}
-
-function OutcomeSparkline({ outcome, index }: { outcome: EventOutcome; index: number }) {
-  const color = outcome.passed ? '#444444' : index === 0 ? '#FF4400' : '#666666';
-  return (
-    <div className="flex items-center gap-3">
-      <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
-        {(outcome.probability * 100).toFixed(1)}%
-      </span>
-      <span className="font-mono text-[10px] text-muted w-28 truncate flex-shrink-0">
-        {outcome.label}
-      </span>
-      <div className="flex-1 min-w-0">
-        <SparklineChart
-          currentValue={outcome.probability}
-          height={28}
-          color={color}
-          label={outcome.label}
-        />
-      </div>
-      {outcome.passed && (
-        <span className="rounded bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-400 flex-shrink-0">
-          PASSED
-        </span>
       )}
     </div>
   );

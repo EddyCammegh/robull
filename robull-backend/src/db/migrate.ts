@@ -185,10 +185,10 @@ ALTER TABLE bets ADD COLUMN IF NOT EXISTS reply_type TEXT;
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS reply_to_agent TEXT;
 CREATE INDEX IF NOT EXISTS idx_bets_parent_bet_id ON bets(parent_bet_id) WHERE parent_bet_id IS NOT NULL;
 
--- Cleanup TESTER agent (after all tables exist)
-DELETE FROM event_agent_activity WHERE agent_id IN (SELECT id FROM agents WHERE name = 'TESTER');
-DELETE FROM bets WHERE agent_id IN (SELECT id FROM agents WHERE name = 'TESTER');
-DELETE FROM agents WHERE name = 'TESTER';
+-- Cleanup TESTER agents (after all tables exist)
+DELETE FROM event_agent_activity WHERE agent_id IN (SELECT id FROM agents WHERE name IN ('TESTER', 'TESTER2', 'TESTER3'));
+DELETE FROM bets WHERE agent_id IN (SELECT id FROM agents WHERE name IN ('TESTER', 'TESTER2', 'TESTER3'));
+DELETE FROM agents WHERE name IN ('TESTER', 'TESTER2', 'TESTER3');
 
 -- Price history for sparkline charts
 CREATE TABLE IF NOT EXISTS price_history (

@@ -1,11 +1,13 @@
 'use client';
 
 import CountdownTimer from './CountdownTimer';
-import SparklineChart from './SparklineChart';
 import { useMarketClick } from './MarketClickProvider';
+import { getChartType } from '@/lib/chartDecision';
 import type { Market, RobullEvent } from '@/types';
 
 type SelectionBadge = 'closing_soon' | 'hot' | undefined;
+
+const OUTCOME_COLOURS = ['#FF4400', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#6B7280'];
 
 interface OutcomeInfo {
   label: string;
@@ -26,7 +28,7 @@ function getOutcomes(kind: 'market' | 'event', market?: Market, event?: RobullEv
     return [...event.outcomes]
       .filter(o => !o.passed)
       .sort((a, b) => b.probability - a.probability)
-      .slice(0, 3)
+      .slice(0, 5)
       .map((o, i) => ({
         label: o.label,
         probability: o.probability,
@@ -54,6 +56,15 @@ export default function MarketPanel({ kind, market, event, badge, liveProbs }: M
   const id = kind === 'market' ? market!.id : event!.id;
 
   const outcomes = getOutcomes(kind, market, event, liveProbs);
+  const isBinary = outcomes.length <= 2;
+  const isIndependent = kind === 'event' && event && (event.event_type === 'independent' || event.event_type === 'sports_props');
+  const maxProb = outcomes.length > 0 ? outcomes[0].probability : 1;
+
+  // Chart decision (no history available in mini cards → bar or list)
+  const chartDecision = kind === 'event' && event
+    ? getChartType(event, null)
+    : { type: 'bar' as const };
+  const showList = chartDecision.type === 'list';
 
   const handleClick = () => {
     if (kind === 'market') openMarket(id, market);
@@ -83,25 +94,59 @@ export default function MarketPanel({ kind, market, event, badge, liveProbs }: M
         {title}
       </p>
 
-      {/* Sparklines per outcome */}
-      <div className="mt-auto mb-1 space-y-0.5">
-        {outcomes.map((o, i) => (
-          <div key={i} className="flex items-center gap-1">
-            <span className="font-mono text-[8px] text-muted truncate w-14 flex-shrink-0">
-              {o.label.length > 8 ? o.label.slice(0, 8) + '..' : o.label}
-            </span>
-            <div className="flex-1 min-w-0">
-              <SparklineChart
-                currentValue={o.probability}
-                height={16}
-                color={o.isLeader ? '#FF4400' : '#666666'}
-              />
-            </div>
-            <span className="font-mono text-[9px] text-white font-semibold w-7 text-right flex-shrink-0">
-              {(o.probability * 100).toFixed(0)}%
-            </span>
-          </div>
-        ))}
+      {/* Probability display — bars or list */}
+      <div className="mt-auto mb-1 space-y-1">
+        {showList ? (
+          <>
+            {outcomes.slice(0, 4).map((o, i) => (
+              <div key={i} className="flex items-center gap-1">
+                <span className="font-mono text-[9px] text-white font-semibold w-7 flex-shrink-0">
+                  {(o.probability * 100).toFixed(0)}%
+                </span>
+                <span className="font-mono text-[8px] text-muted truncate">
+                  {o.label.length > 16 ? o.label.slice(0, 16) + '..' : o.label}
+                </span>
+              </div>
+            ))}
+            {outcomes.length > 4 && (
+              <span className="font-mono text-[8px] text-muted">+{outcomes.length - 4} more</span>
+            )}
+          </>
+        ) : (
+          <>
+            {outcomes.slice(0, isBinary ? 2 : 4).map((o, i) => {
+              const colour = isBinary
+                ? (o.isLeader ? '#FF4400' : '#666666')
+                : (OUTCOME_COLOURS[i] ?? OUTCOME_COLOURS[OUTCOME_COLOURS.length - 1]);
+              const barPct = (isBinary || isIndependent)
+                ? o.probability * 100
+                : (maxProb > 0 ? (o.probability / maxProb) * 100 : 0);
+
+              return (
+                <div key={i} className="flex items-center gap-1.5">
+                  <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#0d0d0d' }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(barPct, 3)}%`,
+                        background: colour,
+                      }}
+                    />
+                  </div>
+                  <span className="font-mono text-[9px] text-white font-semibold w-7 text-right flex-shrink-0">
+                    {(o.probability * 100).toFixed(0)}%
+                  </span>
+                  <span className="font-mono text-[8px] text-muted truncate w-14 flex-shrink-0">
+                    {o.label.length > 8 ? o.label.slice(0, 8) + '..' : o.label}
+                  </span>
+                </div>
+              );
+            })}
+            {!isBinary && outcomes.length > 4 && (
+              <span className="font-mono text-[8px] text-muted">+{outcomes.length - 4} more</span>
+            )}
+          </>
+        )}
       </div>
 
       {/* Bottom row: countdown + bet count */}

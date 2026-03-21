@@ -28,12 +28,9 @@ export default function SparklineChart({
     if (hasHistory) {
       return data!.map((d) => d.value);
     }
-    // Flat line fallback
     return [currentValue, currentValue];
   }, [data, currentValue, hasHistory]);
 
-  // Map points to SVG coordinates
-  // Y: 0-1 probability → SVG y (top=high, bottom=low), with 2px padding
   const padY = 2;
   const innerH = height - padY * 2;
 
@@ -52,11 +49,14 @@ export default function SparklineChart({
   const pct = (currentValue * 100).toFixed(0);
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div
+      style={{ height, width: '100%', background: '#111', borderRadius: 3, position: 'relative' }}
+    >
       <svg
+        width="100%"
+        height="100%"
         viewBox={`0 0 100 ${height}`}
         preserveAspectRatio="none"
-        className="w-full h-full"
         style={{ display: 'block' }}
       >
         {pathD && (
@@ -64,13 +64,23 @@ export default function SparklineChart({
             d={pathD}
             fill="none"
             stroke={color}
-            strokeWidth={1.5}
+            strokeWidth={2}
             vectorEffect="non-scaling-stroke"
           />
         )}
       </svg>
       {!hasHistory && (
-        <span className="absolute bottom-0 right-0 font-mono text-[8px] text-muted opacity-60 leading-none">
+        <span
+          style={{
+            position: 'absolute',
+            bottom: 1,
+            right: 3,
+            fontSize: 8,
+            fontFamily: 'monospace',
+            color: '#555',
+            lineHeight: 1,
+          }}
+        >
           {pct}%
         </span>
       )}
