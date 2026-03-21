@@ -121,6 +121,15 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
         childrenSynced++;
       }
 
+      // Fix parent event closes_at: use the latest child closes_at if it's newer
+      // (Polymarket's event endDate can be stale/wrong)
+      await db.query(
+        `UPDATE events SET closes_at = GREATEST(events.closes_at,
+           (SELECT MAX(m.closes_at) FROM markets m WHERE m.event_id = $1))
+         WHERE id = $1`,
+        [eventId]
+      );
+
       // Detect event type
       // Sort by polymarket_id for deterministic index alignment with quantities vector
       const sortedChildren = [...evt.child_markets].sort((a, b) => a.polymarket_id.localeCompare(b.polymarket_id));

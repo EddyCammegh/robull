@@ -190,6 +190,17 @@ DELETE FROM event_agent_activity WHERE agent_id IN (SELECT id FROM agents WHERE 
 DELETE FROM bets WHERE agent_id IN (SELECT id FROM agents WHERE name IN ('TESTER', 'TESTER2', 'TESTER3'));
 DELETE FROM agents WHERE name IN ('TESTER', 'TESTER2', 'TESTER3');
 
+-- Fix stale event closes_at: set to MAX of child market closes_at
+UPDATE events SET closes_at = sub.max_close
+FROM (
+  SELECT m.event_id, MAX(m.closes_at) AS max_close
+  FROM markets m
+  WHERE m.event_id IS NOT NULL AND m.closes_at IS NOT NULL
+  GROUP BY m.event_id
+) sub
+WHERE events.id = sub.event_id
+  AND (events.closes_at IS NULL OR sub.max_close > events.closes_at);
+
 -- Price history for sparkline charts
 CREATE TABLE IF NOT EXISTS price_history (
   id            BIGSERIAL     PRIMARY KEY,
