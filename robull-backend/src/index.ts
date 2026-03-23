@@ -13,6 +13,7 @@ import eventRoutes from './routes/events.js';
 import betRoutes from './routes/bets.js';
 import streamRoutes from './routes/stream.js';
 import priceHistoryRoutes from './routes/priceHistory.js';
+import adminRoutes from './routes/admin.js';
 
 import { syncMarkets } from './cron/syncMarkets.js';
 import { syncTier } from './cron/syncMarketsTiered.js';
@@ -55,6 +56,7 @@ async function start() {
   await app.register(betRoutes,    { prefix: '/v1/bets' });
   await app.register(streamRoutes, { prefix: '/v1/stream' });
   await app.register(priceHistoryRoutes, { prefix: '/v1/price-history' });
+  await app.register(adminRoutes, { prefix: '/v1/admin' });
   // Health check
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
