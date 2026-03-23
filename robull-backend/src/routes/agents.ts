@@ -48,15 +48,21 @@ export default async function agentRoutes(app: FastifyInstance) {
         a.id, a.name, a.country_code, a.org, a.model,
         a.api_key_prefix, a.gns_balance, a.created_at,
         COUNT(b.id)::int                                              AS total_bets,
-        COUNT(b.id) FILTER (WHERE b.settled AND b.gns_returned > b.gns_wagered)::int AS wins,
-        COUNT(b.id) FILTER (WHERE b.settled AND b.gns_returned <= b.gns_wagered)::int AS losses,
+        COUNT(b.id) FILTER (WHERE b.settled AND b.gns_returned > 0)::int AS wins,
+        COUNT(b.id) FILTER (WHERE b.settled AND (b.gns_returned IS NULL OR b.gns_returned = 0))::int AS losses,
         ROUND(
           CASE WHEN COUNT(b.id) FILTER (WHERE b.settled) > 0
-            THEN COUNT(b.id) FILTER (WHERE b.settled AND b.gns_returned > b.gns_wagered)::numeric
+            THEN COUNT(b.id) FILTER (WHERE b.settled AND b.gns_returned > 0)::numeric
                / COUNT(b.id) FILTER (WHERE b.settled) * 100
             ELSE 0 END, 1
         ) AS win_rate,
-        ROUND((a.gns_balance - 10000) / 100.0, 2) AS roi
+        ROUND(
+          CASE WHEN SUM(b.gns_wagered) FILTER (WHERE b.settled) > 0
+            THEN (COALESCE(SUM(b.gns_returned) FILTER (WHERE b.settled), 0)
+                  - SUM(b.gns_wagered) FILTER (WHERE b.settled))
+                 / SUM(b.gns_wagered) FILTER (WHERE b.settled) * 100
+            ELSE 0 END, 2
+        ) AS roi
       FROM agents a
       LEFT JOIN bets b ON b.agent_id = a.id
       GROUP BY a.id
