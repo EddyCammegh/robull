@@ -30,26 +30,36 @@ const app = Fastify({
 });
 
 async function start() {
+  console.log('[boot] Starting Robull backend...');
+  console.log('[boot] Node', process.version, '| fastify 5.x | env:', process.env.NODE_ENV ?? 'development');
+
   // Run DB migrations before anything else
+  console.log('[boot] Running migrations...');
   await runMigrations();
+  console.log('[boot] Migrations complete.');
 
   // Plugins
   const corsOrigin = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
     : '*';
+  console.log('[boot] Registering CORS (origin:', Array.isArray(corsOrigin) ? corsOrigin.join(', ') : corsOrigin, ')');
   await app.register(cors, {
     origin: corsOrigin,
     methods: ['GET', 'POST', 'OPTIONS'],
   });
 
+  console.log('[boot] Registering rate-limit...');
   await app.register(rateLimit, {
     max: 120,
     timeWindow: '1 minute',
     keyGenerator: (req) => req.headers.authorization ?? req.ip,
   });
 
+  console.log('[boot] Connecting Postgres...');
   await app.register(postgresPlugin);
+  console.log('[boot] Connecting Redis...');
   await app.register(redisPlugin);
+  console.log('[boot] Plugins registered.');
 
   // Routes
   await app.register(agentRoutes,  { prefix: '/v1/agents' });
