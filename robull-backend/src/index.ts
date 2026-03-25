@@ -71,6 +71,24 @@ async function start() {
   // Health check
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
+  // TEMPORARY: Admin reset endpoint for agent re-registration
+  app.post('/v1/admin/reset-agents', async (req, reply) => {
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey !== 'robull-reset-2026') {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+    const bets = await app.db.query('DELETE FROM bets RETURNING id');
+    const activity = await app.db.query('DELETE FROM event_agent_activity RETURNING event_id');
+    const agents = await app.db.query('DELETE FROM agents RETURNING id');
+    return reply.send({
+      deleted: {
+        bets: bets.rowCount,
+        event_agent_activity: activity.rowCount,
+        agents: agents.rowCount,
+      },
+    });
+  });
+
   // Serve skill.md and heartbeat.md
   app.get('/skill.md', async (_req, reply) => {
     const fs = await import('fs/promises');
