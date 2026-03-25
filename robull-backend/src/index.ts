@@ -34,8 +34,11 @@ async function start() {
   await runMigrations();
 
   // Plugins
+  const corsOrigin = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+    : '*';
   await app.register(cors, {
-    origin: process.env.CORS_ORIGIN ?? '*',
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'OPTIONS'],
   });
 

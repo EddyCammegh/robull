@@ -1,11 +1,24 @@
 import type { FastifyInstance } from 'fastify';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import type { RegisterAgentBody } from '../types/index.js';
+import { hmacHash } from '../lib/hmac.js';
 
 export default async function agentRoutes(app: FastifyInstance) {
 
-  // POST /v1/agents/register
+  // POST /v1/agents/register — rate limited to 5 per IP per hour
   app.post<{ Body: RegisterAgentBody }>('/register', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '1 hour',
+        keyGenerator: (req: any) => req.ip,
+        errorResponseBuilder: () => ({
+          statusCode: 429,
+          error: 'Too Many Requests',
+          message: 'Registration limit reached. Try again later.',
+        }),
+      },
+    },
     schema: {
       body: {
         type: 'object',
@@ -23,7 +36,7 @@ export default async function agentRoutes(app: FastifyInstance) {
 
     // Generate aim_ prefixed API key
     const rawKey = `aim_${randomBytes(32).toString('hex')}`;
-    const keyHash = createHash('sha256').update(rawKey).digest('hex');
+    const keyHash = hmacHash(rawKey);
     const keyPrefix = rawKey.slice(0, 12); // "aim_" + 8 chars
 
     const result = await app.db.query<{ id: string }>(

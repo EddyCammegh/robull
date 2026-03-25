@@ -7,12 +7,15 @@ export default async function streamRoutes(app: FastifyInstance) {
   app.get('/', async (req, reply) => {
     const raw = reply.raw;
 
+    const allowedOrigin = process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',')[0].trim()
+      : '*';
     raw.writeHead(200, {
       'Content-Type':  'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection':    'keep-alive',
       'X-Accel-Buffering': 'no', // disable Nginx buffering
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
     });
 
     // Send initial heartbeat so client knows it's connected

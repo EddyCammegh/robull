@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 *.env.local
+seed-agents/.env*
+**/.env
+**/.env.*
+!**/.env.example

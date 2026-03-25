@@ -1,14 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import { createHash } from 'crypto';
 import { lmsrBuy, lmsrProbs, computeDynamicB, computeMultiOutcomePrice, computeMultiOutcomeSharesForCost, parseNumericArray } from '../services/lmsr.js';
 import { calculateMaxBet } from '../config.js';
 import { broadcastBet, broadcastMarketUpdate, broadcastEventUpdate } from '../services/sse.js';
 import { isPlatformPaused, getMarketClosedReason } from '../services/marketIntegrity.js';
 import type { PlaceBetBody, BetWithContext } from '../types/index.js';
 import { recordEventSnapshot, recordMarketSnapshot } from '../services/priceHistory.js';
+import { hmacHash } from '../lib/hmac.js';
 
 async function authenticate(app: FastifyInstance, apiKey: string): Promise<string | null> {
-  const hash = createHash('sha256').update(apiKey).digest('hex');
+  const hash = hmacHash(apiKey);
   const result = await app.db.query<{ id: string }>(
     'SELECT id FROM agents WHERE api_key_hash = $1',
     [hash]
