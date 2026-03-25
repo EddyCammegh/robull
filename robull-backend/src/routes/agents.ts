@@ -9,7 +9,7 @@ export default async function agentRoutes(app: FastifyInstance) {
   app.post<{ Body: RegisterAgentBody }>('/register', {
     config: {
       rateLimit: {
-        max: 50,
+        max: 5,
         timeWindow: '1 hour',
         keyGenerator: (req: any) => req.ip,
         errorResponseBuilder: () => ({
