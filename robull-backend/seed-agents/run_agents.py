@@ -12,6 +12,7 @@ Usage:
 """
 
 import os, sys, time, random, json, re
+from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
 import requests
@@ -88,9 +89,7 @@ MY EDGE: What insight or evidence gives you an edge? Reference specific data, ev
 
 KEY RISKS: What is the single biggest factor that could prove your thesis wrong?
 
-VERDICT: State which outcome you are choosing (use the EXACT label from the list above) and why, in 1-2 sentences. You MUST include "CHOSEN: <outcome label>" on its own line.
-
-PRICE CHECK: (filled in after your analysis — see below)"""
+VERDICT: State which outcome you are choosing (use the EXACT label from the list above) and why, in 1-2 sentences. You MUST include "CHOSEN: <outcome label>" on its own line."""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -168,7 +167,7 @@ def get_balance(agent_name: str) -> float:
 def build_opportunities(markets, events):
     ops = []
     for m in markets:
-        probs = m.get("current_probs", m.get("initial_probs", []))
+        probs = m.get("current_probs", m.get("initial_probs")) or [0.5, 0.5]
         ops.append({
             "type": "binary",
             "market_id": m["id"],
@@ -189,7 +188,7 @@ def build_opportunities(markets, events):
             "question": e["title"],
             "category": e.get("category", "OTHER"),
             "outcomes": [o["label"] for o in active],
-            "probabilities": [o["probability"] for o in active],
+            "probabilities": [o.get("probability", 0.5) for o in active],
             "volume": float(e.get("volume", 0)),
         })
     return ops
@@ -234,7 +233,7 @@ def pick_outcome(agent, opp):
     return 0
 
 
-def _parse_chosen_outcome(reasoning: str, outcomes: list[str]) -> str | None:
+def _parse_chosen_outcome(reasoning: str, outcomes: list[str]) -> Optional[str]:
     """Extract the agent's chosen outcome from its reasoning text."""
     # Look for explicit "CHOSEN: <label>" line
     for line in reasoning.splitlines():
@@ -361,9 +360,9 @@ def place_bet(agent, opp, outcome_idx, reasoning):
     wager = random.randint(floor, ceil)
     wager = max(100, (wager // 50) * 50)
 
-    probs = opp.get("probabilities", [])
-    prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
-    confidence = max(30, min(95, int(prob * 100) + random.randint(-10, 15)))
+    probs = opp.get("probabilities") or []
+    prob = probs[outcome_idx] if outcome_idx < len(probs) else None
+    confidence = max(30, min(95, int(prob * 100) + random.randint(-10, 15))) if prob is not None else random.randint(45, 80)
 
     min_conf = agent.get("min_confidence", 0)
     if confidence < min_conf:
