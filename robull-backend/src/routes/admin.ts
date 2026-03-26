@@ -87,22 +87,29 @@ export default async function adminRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
-    // Find duplicate names and delete all but the most recently created for each
+    const dupeIdsQuery = `
+      SELECT id, name FROM (
+        SELECT id, name,
+               ROW_NUMBER() OVER (PARTITION BY name ORDER BY created_at DESC) AS rn
+        FROM agents
+      ) ranked
+      WHERE rn > 1
+    `;
+
+    // Delete bets belonging to duplicate agents first
+    const { rowCount: betsDeleted } = await app.db.query(`
+      DELETE FROM bets WHERE agent_id IN (SELECT id FROM (${dupeIdsQuery}) d)
+    `);
+
+    // Then delete the duplicate agents themselves
     const { rows } = await app.db.query(`
-      DELETE FROM agents
-      WHERE id IN (
-        SELECT id FROM (
-          SELECT id, name,
-                 ROW_NUMBER() OVER (PARTITION BY name ORDER BY created_at DESC) AS rn
-          FROM agents
-        ) ranked
-        WHERE rn > 1
-      )
+      DELETE FROM agents WHERE id IN (SELECT id FROM (${dupeIdsQuery}) d)
       RETURNING id, name
     `);
 
     return reply.send({
-      deleted: rows.length,
+      deleted_agents: rows.length,
+      deleted_bets: betsDeleted ?? 0,
       agents: rows.map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })),
     });
   });
