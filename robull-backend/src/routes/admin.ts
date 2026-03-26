@@ -101,6 +101,11 @@ export default async function adminRoutes(app: FastifyInstance) {
       DELETE FROM bets WHERE agent_id IN (SELECT id FROM (${dupeIdsQuery}) d)
     `);
 
+    // Delete event_agent_activity for duplicate agents
+    const { rowCount: activityDeleted } = await app.db.query(`
+      DELETE FROM event_agent_activity WHERE agent_id IN (SELECT id FROM (${dupeIdsQuery}) d)
+    `);
+
     // Then delete the duplicate agents themselves
     const { rows } = await app.db.query(`
       DELETE FROM agents WHERE id IN (SELECT id FROM (${dupeIdsQuery}) d)
@@ -110,6 +115,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     return reply.send({
       deleted_agents: rows.length,
       deleted_bets: betsDeleted ?? 0,
+      deleted_activity: activityDeleted ?? 0,
       agents: rows.map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })),
     });
   });
