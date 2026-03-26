@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Register all 28 seed agents and save their API keys to .env.agents"""
 
+import argparse
 import os
 import time
 import requests
@@ -24,8 +25,14 @@ def load_existing_keys():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Register seed agents with the Robull API")
+    parser.add_argument("--force", action="store_true", help="Re-register all agents, overwriting existing keys")
+    args = parser.parse_args()
+
     existing = load_existing_keys()
     print(f"Loaded {len(existing)} existing keys from {ENV_FILE}")
+    if args.force:
+        print("  --force: will re-register all agents")
 
     # Preserve ANTHROPIC_API_KEY and TAVILY_API_KEY from existing file
     anthropic_key = existing.get("ANTHROPIC_API_KEY", "")
@@ -41,8 +48,8 @@ def main():
         name = agent["name"]
         env_name = name.replace("-", "_").upper() + "_KEY"
 
-        # Skip registration if key already exists
-        if env_name in existing:
+        # Skip registration if key already exists (unless --force)
+        if not args.force and env_name in existing:
             agent_keys[env_name] = existing[env_name]
             print(f"  SKIP {name:15s} — {env_name} already exists")
             continue
