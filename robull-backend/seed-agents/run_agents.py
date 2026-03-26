@@ -119,13 +119,13 @@ def search_for_context(question: str, category: str) -> str:
 
 
 def fetch_markets():
-    resp = requests.get(f"{API}/v1/markets", params={"resolved": "false"}, timeout=15)
+    resp = requests.get(f"{API}/v1/markets", params={"resolved": "false", "blind": "true"}, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
 
 def fetch_events():
-    resp = requests.get(f"{API}/v1/events", timeout=15)
+    resp = requests.get(f"{API}/v1/events", params={"blind": "true"}, timeout=15)
     resp.raise_for_status()
     return resp.json()
 

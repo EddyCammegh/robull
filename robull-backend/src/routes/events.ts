@@ -78,10 +78,12 @@ export default async function eventRoutes(app: FastifyInstance) {
 
   // GET /v1/events — list grouped events with outcomes
   app.get('/', async (req, reply) => {
-    const { category, resolved } = req.query as {
+    const { category, resolved, blind } = req.query as {
       category?: string;
       resolved?: string;
+      blind?: string;
     };
+    const isBlind = blind === 'true';
 
     const params: unknown[] = [];
     const conditions: string[] = ['1=1'];
@@ -139,7 +141,15 @@ export default async function eventRoutes(app: FastifyInstance) {
       };
     }));
 
-    return reply.send(result.filter(e => e.active_outcomes >= 1));
+    const filtered = result.filter(e => e.active_outcomes >= 1);
+
+    if (isBlind) {
+      for (const evt of filtered) {
+        evt.outcomes = evt.outcomes.map(({ probability, polymarket_probability, divergence, ...rest }: any) => rest);
+      }
+    }
+
+    return reply.send(filtered);
   });
 
   // GET /v1/events/:id/recent-bets — bets from last 3 hours for agent reply system

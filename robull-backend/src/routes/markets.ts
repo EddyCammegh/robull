@@ -5,11 +5,13 @@ export default async function marketRoutes(app: FastifyInstance) {
 
   // GET /v1/markets
   app.get('/', async (req, reply) => {
-    const { category, resolved, include_recent } = req.query as {
+    const { category, resolved, include_recent, blind } = req.query as {
       category?: string;
       resolved?: string;
       include_recent?: string;
+      blind?: string;
     };
+    const isBlind = blind === 'true';
 
     let query = `
       SELECT
@@ -54,10 +56,18 @@ export default async function marketRoutes(app: FastifyInstance) {
     const { rows } = await app.db.query(query, params);
 
     // Attach current LMSR probabilities
-    const markets = rows.map((row) => ({
-      ...row,
-      current_probs: lmsrProbs(parseNumericArray(row.quantities), Number(row.b_parameter)),
-    }));
+    const markets = rows.map((row) => {
+      const m: any = {
+        ...row,
+        current_probs: lmsrProbs(parseNumericArray(row.quantities), Number(row.b_parameter)),
+      };
+      if (isBlind) {
+        delete m.current_probs;
+        delete m.initial_probs;
+        delete m.polymarket_probability;
+      }
+      return m;
+    });
 
     return reply.send(markets);
   });
