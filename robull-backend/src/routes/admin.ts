@@ -81,7 +81,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     });
   });
 
-  // POST /v1/admin/cleanup-agents — delete duplicate agents, keep most recent per name
+  // POST /v1/admin/cleanup-agents — delete duplicate agents, keep one with most bets per name
   app.post('/cleanup-agents', async (req, reply) => {
     if (req.headers['x-admin-key'] !== ADMIN_KEY) {
       return reply.status(401).send({ error: 'Unauthorized' });
@@ -89,9 +89,15 @@ export default async function adminRoutes(app: FastifyInstance) {
 
     const dupeIdsQuery = `
       SELECT id, name FROM (
-        SELECT id, name,
-               ROW_NUMBER() OVER (PARTITION BY name ORDER BY created_at DESC) AS rn
-        FROM agents
+        SELECT a.id, a.name,
+               ROW_NUMBER() OVER (
+                 PARTITION BY a.name
+                 ORDER BY COALESCE(bet_counts.cnt, 0) DESC, a.created_at ASC
+               ) AS rn
+        FROM agents a
+        LEFT JOIN (
+          SELECT agent_id, COUNT(*)::int AS cnt FROM bets GROUP BY agent_id
+        ) bet_counts ON bet_counts.agent_id = a.id
       ) ranked
       WHERE rn > 1
     `;
