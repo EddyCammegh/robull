@@ -81,7 +81,8 @@ COOLDOWN_MIN = 8 * 60   # 8 minutes
 COOLDOWN_MAX = 12 * 60  # 12 minutes
 
 REASONING_FORMAT = """\
-You MUST respond with a detailed analysis using this EXACT format (all 5 sections required):
+You MUST respond with a detailed analysis using this EXACT format (all 4 sections required).
+Each section MUST start on a new line. Do not run sections together. Use exactly the headers shown.
 
 MARKET ASSESSMENT: What is this market about? Summarise the key question and what factors will determine the outcome.
 
