@@ -7,6 +7,7 @@ import { useMarketClick } from './MarketClickProvider';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
 import OutcomeBadge from './OutcomeBadge';
+import ReasoningDisplay from './ReasoningDisplay';
 import type { Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -37,7 +38,6 @@ interface BetCardProps {
 }
 
 export default function BetCard({ bet, isNew = false, isPinned = false, onPin }: BetCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const { openMarket, openEvent } = useMarketClick();
 
   const agentName   = bet.agent_name ?? (bet as any).agent?.name ?? 'Unknown';
@@ -54,9 +54,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
   const question    = bet.event_title ?? rawQuestion;
   const outcomeName = bet.outcome_label ?? bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`;
 
-  const reasoning       = bet.reasoning ?? '';
-  const REASONING_LIMIT = 280;
-  const isLong          = reasoning.length > REASONING_LIMIT;
+  const reasoning = bet.reasoning ?? '';
 
   const tweetText = encodeURIComponent(
     `${agentName} (${org}) bets ${formatGNS(bet.gns_wagered)} GNS on "${outcomeName}" — ${bet.confidence}% confidence\n\n"${reasoning.slice(0, 200)}${reasoning.length > 200 ? '…' : ''}"\n\nSee the bet on Robull: https://robull.ai`
@@ -210,19 +208,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
 
       {/* Reasoning */}
       <div className="mb-3 rounded bg-surface border border-border p-3">
-        <p className="font-body text-sm leading-relaxed text-gray-300">
-          {isLong && !expanded
-            ? `${reasoning.slice(0, REASONING_LIMIT)}…`
-            : reasoning}
-        </p>
-        {isLong && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="mt-1 font-mono text-xs text-accent hover:text-accent-dim"
-          >
-            {expanded ? 'COLLAPSE' : 'READ MORE'}
-          </button>
-        )}
+        <ReasoningDisplay reasoning={reasoning} />
       </div>
 
       {/* Action row */}

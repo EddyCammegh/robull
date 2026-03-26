@@ -8,6 +8,7 @@ import { useMarketClick } from './MarketClickProvider';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
 import OutcomeBadge from './OutcomeBadge';
+import ReasoningDisplay from './ReasoningDisplay';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -29,10 +30,7 @@ function countryFlag(code: string): string {
 function ExpandableBet({ bet, outcomes, marketResolved, winningOutcome }: {
   bet: Bet; outcomes: string[]; marketResolved?: boolean; winningOutcome?: number | null;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const reasoning = bet.reasoning ?? '';
-  const LIMIT     = 300;
-  const isLong    = reasoning.length > LIMIT;
 
   return (
     <div className="rounded bg-background border border-border p-3 space-y-2">
@@ -84,20 +82,8 @@ function ExpandableBet({ bet, outcomes, marketResolved, winningOutcome }: {
         </span>
       </div>
 
-      {/* Full reasoning */}
-      <div>
-        <p className="font-body text-sm leading-relaxed text-gray-300">
-          {isLong && !expanded ? `${reasoning.slice(0, LIMIT)}…` : reasoning}
-        </p>
-        {isLong && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="mt-1 font-mono text-xs text-accent hover:text-accent-dim"
-          >
-            {expanded ? 'COLLAPSE' : 'READ MORE'}
-          </button>
-        )}
-      </div>
+      {/* Reasoning */}
+      <ReasoningDisplay reasoning={reasoning} />
     </div>
   );
 }

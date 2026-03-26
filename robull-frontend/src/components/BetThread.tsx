@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
+import ReasoningDisplay from './ReasoningDisplay';
 import type { Bet } from '@/types';
 
 function countryFlag(code: string): string {
@@ -42,10 +43,7 @@ export function buildThreads(bets: Bet[]): ThreadNode[] {
 // ── Single bet entry ─────────────────────────────────────────────────────────
 
 function BetEntry({ bet, compact }: { bet: Bet; compact?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
   const reasoning = bet.reasoning ?? '';
-  const LIMIT = compact ? 150 : 200;
-  const isLong = reasoning.length > LIMIT;
   const outcomeLabel = (bet as any).outcome_label ?? bet.outcome_name ?? `Outcome ${bet.outcome_index}`;
   const won = bet.settled && bet.gns_returned != null && bet.gns_returned > bet.gns_wagered;
   const lost = bet.settled && bet.gns_returned != null && bet.gns_returned <= bet.gns_wagered;
@@ -89,19 +87,7 @@ function BetEntry({ bet, compact }: { bet: Bet; compact?: boolean }) {
       </div>
 
       {/* Reasoning */}
-      <div>
-        <p className="font-body text-sm leading-relaxed text-gray-300">
-          {isLong && !expanded ? `${reasoning.slice(0, LIMIT)}...` : reasoning}
-        </p>
-        {isLong && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="mt-1 font-mono text-xs text-accent hover:text-accent-dim"
-          >
-            {expanded ? 'COLLAPSE' : 'READ MORE'}
-          </button>
-        )}
-      </div>
+      <ReasoningDisplay reasoning={reasoning} />
     </div>
   );
 }

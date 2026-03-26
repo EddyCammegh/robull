@@ -202,8 +202,8 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
             <button onClick={onClose} className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white hover:bg-subtle/50 text-lg font-mono transition-colors">x</button>
           </div>
 
-          {/* ── Probability chart (type chosen by decision engine) ── */}
-          <div className="mt-4">
+          {/* ── Probability chart (skipped entirely for independent events) ── */}
+          {!isIndependent && (<div className="mt-4">
             <div className="flex items-center justify-between mb-3">
               <p className="font-mono text-[10px] text-muted uppercase tracking-widest">Probability trends</p>
               {chartDecision.type === 'line' && (
@@ -312,31 +312,13 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
               </div>
             )}
 
-            {/* LIST (percentage only, no bars) */}
-            {chartDecision.type === 'list' && (
-              <div className="space-y-1">
-                {activeOutcomes.slice(0, BAR_TOP_N).map((o, i) => (
-                  <div key={o.market_id} className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-white w-12 text-right font-semibold flex-shrink-0">
-                      {(o.probability * 100).toFixed(1)}%
-                    </span>
-                    <span className="font-mono text-[10px] text-muted">{o.label}</span>
-                    {o.passed && (
-                      <span className="rounded bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-400 flex-shrink-0">
-                        PASSED
-                      </span>
-                    )}
-                  </div>
-                ))}
-                {activeOutcomes.length > BAR_TOP_N && (
-                  <p className="font-mono text-[10px] text-muted">+{activeOutcomes.length - BAR_TOP_N} more</p>
-                )}
-              </div>
-            )}
-          </div>
+          </div>)}
 
-          {/* Bar chart snapshot */}
+          {/* Bar chart snapshot — always shown */}
           <div className="mt-5 space-y-1.5">
+            {isIndependent && (
+              <p className="font-mono text-[10px] text-blue-400 mb-2">INDEPENDENT — each outcome resolves separately</p>
+            )}
             <p className="font-mono text-[10px] text-muted uppercase tracking-widest">Current snapshot</p>
             {barOutcomes.map((o, i) => {
               const barWidth = isIndependent

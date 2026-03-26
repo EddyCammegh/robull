@@ -187,7 +187,7 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
               {/* Featured 3x2 grid (or expanded list view) */}
               {!isExpanded ? (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                     {featured.map((item) => (
                       <MarketPanel
                         key={item.id}
@@ -212,7 +212,7 @@ export default function MarketsView({ markets, events = [] }: MarketsViewProps) 
                 </>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                     {expandedItems.map((item) => (
                       <MarketPanel
                         key={item.id}

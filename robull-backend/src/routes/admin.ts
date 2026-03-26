@@ -80,4 +80,30 @@ export default async function adminRoutes(app: FastifyInstance) {
       },
     });
   });
+
+  // POST /v1/admin/cleanup-agents — delete duplicate agents, keep most recent per name
+  app.post('/cleanup-agents', async (req, reply) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    // Find duplicate names and delete all but the most recently created for each
+    const { rows } = await app.db.query(`
+      DELETE FROM agents
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id, name,
+                 ROW_NUMBER() OVER (PARTITION BY name ORDER BY created_at DESC) AS rn
+          FROM agents
+        ) ranked
+        WHERE rn > 1
+      )
+      RETURNING id, name
+    `);
+
+    return reply.send({
+      deleted: rows.length,
+      agents: rows.map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })),
+    });
+  });
 }

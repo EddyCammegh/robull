@@ -37,6 +37,15 @@ if OPENAI_KEY:
     from openai import OpenAI
     openai_client = OpenAI(api_key=OPENAI_KEY)
 
+TAVILY_KEY = os.environ.get("TAVILY_API_KEY", "")
+tavily_client = None
+if TAVILY_KEY:
+    from tavily import TavilyClient
+    tavily_client = TavilyClient(api_key=TAVILY_KEY)
+    print("  Tavily: connected")
+else:
+    print("  Tavily: NO KEY — agents will reason without web search")
+
 # ── Load agent cohorts ──────────────────────────────────────────────────────
 
 from agent_cohorts import AGENTS as COHORT_AGENTS
@@ -76,6 +85,29 @@ VERDICT: Your final call — state your conviction clearly in one sentence."""
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 _balance_cache: dict[str, float] = {}
+
+
+def search_for_context(question: str, category: str) -> str:
+    """Search Tavily for web context relevant to a market question."""
+    if not tavily_client:
+        return ""
+    try:
+        result = tavily_client.search(
+            query=f"{question} {category}",
+            search_depth="basic",
+            max_results=3,
+        )
+        parts = []
+        if result.get("answer"):
+            parts.append(f"Web Summary: {result['answer']}")
+        for r in result.get("results", [])[:3]:
+            title = r.get("title", "")
+            content = r.get("content", "")[:200]
+            parts.append(f"- {title}: {content}")
+        return "\n".join(parts)
+    except Exception as e:
+        print(f"  [!] Tavily search failed: {e}")
+        return ""
 
 
 def fetch_markets():
@@ -180,15 +212,22 @@ def generate_reasoning(agent, opp, outcome_idx):
     chosen = outcomes[outcome_idx] if outcome_idx < len(outcomes) else "Unknown"
     prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
 
+    # Fetch web context before building prompt
+    web_context = search_for_context(opp["question"], opp.get("category", ""))
+    context_block = f"\n\nWEB CONTEXT:\n{web_context}" if web_context else ""
+
+    # Stage 1: Blind reasoning — no prices, just question + outcomes + web context
     if opp["type"] == "event":
         outcome_lines = "\n".join(
-            f"  - {outcomes[i]}: {probs[i]:.1%}" for i in range(min(len(outcomes), 12))
+            f"  - {outcomes[i]}" for i in range(min(len(outcomes), 12))
         )
         user_prompt = (
             f'Event: "{opp["question"]}"\n'
             f"Category: {opp['category']}\n"
-            f"Available outcomes:\n{outcome_lines}\n\n"
-            f"You are betting on: {chosen} (currently priced at {prob:.1%})\n\n"
+            f"Available outcomes:\n{outcome_lines}\n"
+            f"{context_block}\n\n"
+            f"You are betting on: {chosen}\n"
+            f"Based on the question, outcomes, and any web context above, form your OWN probability estimate for each outcome BEFORE seeing market prices.\n\n"
             f"{REASONING_FORMAT}"
         )
     else:
@@ -196,9 +235,29 @@ def generate_reasoning(agent, opp, outcome_idx):
             f'Market: "{opp["question"]}"\n'
             f"Category: {opp['category']}\n"
             f"Outcomes: {', '.join(outcomes)}\n"
-            f"Current probabilities: {', '.join(f'{p:.1%}' for p in probs)}\n"
-            f"You are betting: {chosen} (currently priced at {prob:.1%})\n\n"
+            f"{context_block}\n\n"
+            f"You are betting: {chosen}\n"
+            f"Based on the question, outcomes, and any web context above, form your OWN probability estimate BEFORE seeing the market price.\n\n"
             f"{REASONING_FORMAT}"
+        )
+
+    # Stage 2: Append market price reveal after reasoning format
+    if opp["type"] == "event":
+        price_lines = "\n".join(
+            f"  - {outcomes[i]}: {probs[i]:.1%}" for i in range(min(len(outcomes), 12))
+        )
+        user_prompt += (
+            f"\n\n--- MARKET PRICE REVEAL ---\n"
+            f"Actual market prices:\n{price_lines}\n"
+            f"Your chosen outcome ({chosen}) is priced at {prob:.1%}.\n"
+            f"Note any divergence between your independent estimate and the market price in your VERDICT."
+        )
+    else:
+        user_prompt += (
+            f"\n\n--- MARKET PRICE REVEAL ---\n"
+            f"Actual market prices: {', '.join(f'{o}: {p:.1%}' for o, p in zip(outcomes, probs))}\n"
+            f"Your chosen outcome ({chosen}) is priced at {prob:.1%}.\n"
+            f"Note any divergence between your independent estimate and the market price in your VERDICT."
         )
 
     provider = agent.get("provider", "anthropic")
@@ -585,6 +644,7 @@ def main():
     print(f"  Agents: {len(AGENTS)} loaded")
     print(f"  Anthropic: {'yes' if claude_client else 'NO'}")
     print(f"  OpenAI: {'yes' if openai_client else 'NO'}")
+    print(f"  Tavily: {'yes' if tavily_client else 'NO'}")
     print(f"  Cooldown: {COOLDOWN_MIN//60}-{COOLDOWN_MAX//60} min per agent")
     print("=" * 60)
 
