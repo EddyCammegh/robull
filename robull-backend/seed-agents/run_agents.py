@@ -80,15 +80,17 @@ COOLDOWN_MIN = 8 * 60   # 8 minutes
 COOLDOWN_MAX = 12 * 60  # 12 minutes
 
 REASONING_FORMAT = """\
-You MUST respond with a detailed analysis using this EXACT format (all 4 sections required, minimum 3 sentences total):
+You MUST respond with a detailed analysis using this EXACT format (all 5 sections required):
 
-MARKET ASSESSMENT: What is this market about and what is the current pricing telling us? Be specific about the current probability and what it implies.
+MARKET ASSESSMENT: What is this market about? Summarise the key question and what factors will determine the outcome.
 
-MY EDGE: What do you see that the market is mispricing? Reference specific data, events, or analytical frameworks from your expertise.
+MY EDGE: What insight or evidence gives you an edge? Reference specific data, events, or analytical frameworks from your expertise.
 
 KEY RISKS: What is the single biggest factor that could prove your thesis wrong?
 
-VERDICT: Your final call — state your conviction clearly in one sentence."""
+VERDICT: State which outcome you are choosing (use the EXACT label from the list above) and why, in 1-2 sentences. You MUST include "CHOSEN: <outcome label>" on its own line.
+
+PRICE CHECK: (filled in after your analysis — see below)"""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -118,22 +120,22 @@ def search_for_context(question: str, category: str) -> str:
         return ""
 
 
-# Patterns that look like market probabilities leaked into web search results
-_PROB_PATTERNS = re.compile(
-    r'\d+\.?\d*%\s*(?:probability|chance|likely|likelihood)'  # "65% probability"
-    r'|(?:priced|trading|valued|quoted)\s+at\s+\d+\.?\d*%'   # "priced at 65%"
-    r'|(?:probability|chance|odds)\s+(?:of\s+)?\d+\.?\d*%'    # "probability of 65%"
-    r'|\b(?:yes|no)\s+\d+\.?\d*[¢%]'                         # "Yes 65¢" / "Yes 65%"
-    r'|\d+\.?\d*[¢%]\s+(?:yes|no)\b'                         # "65¢ Yes"
-    r'|\b\d+\.?\d*%\s*(?:→|->|to)\s*\d+\.?\d*%'              # "45% → 62%"
-    r'|(?:currently|now)\s+(?:at\s+)?\d+\.?\d*%'              # "currently at 65%"
-    , re.IGNORECASE
+# Strip any phrase containing a percentage figure — removes the whole
+# surrounding clause (up to sentence/clause boundaries) so no numeric
+# probability context leaks into Stage 1.
+_PCT_CLAUSE = re.compile(
+    r'[^.,;:\n]*\d+\.?\d*\s*[%¢][^.,;:\n]*[.,;:]?\s*',
+    re.IGNORECASE,
 )
 
 
 def _strip_market_probabilities(text: str) -> str:
-    """Remove percentage figures that look like market probabilities from web context."""
-    return _PROB_PATTERNS.sub('', text).strip()
+    """Aggressively remove all percentage figures and their surrounding phrases from web context."""
+    cleaned = _PCT_CLAUSE.sub('', text)
+    # Collapse any resulting double-spaces or blank lines
+    cleaned = re.sub(r' {2,}', ' ', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
 
 
 def fetch_markets():
@@ -232,17 +234,45 @@ def pick_outcome(agent, opp):
     return 0
 
 
-def generate_reasoning(agent, opp, outcome_idx):
+def _parse_chosen_outcome(reasoning: str, outcomes: list[str]) -> str | None:
+    """Extract the agent's chosen outcome from its reasoning text."""
+    # Look for explicit "CHOSEN: <label>" line
+    for line in reasoning.splitlines():
+        stripped = line.strip().upper()
+        if stripped.startswith("CHOSEN:"):
+            chosen_text = line.split(":", 1)[1].strip()
+            # Match against available outcomes (case-insensitive)
+            for o in outcomes:
+                if o.lower() == chosen_text.lower():
+                    return o
+            # Fuzzy: check if outcome label appears in the chosen text
+            for o in outcomes:
+                if o.lower() in chosen_text.lower():
+                    return o
+    # Fallback: scan VERDICT section for any outcome label
+    in_verdict = False
+    for line in reasoning.splitlines():
+        if line.strip().upper().startswith("VERDICT"):
+            in_verdict = True
+        elif in_verdict and line.strip().upper().startswith(("PRICE CHECK", "MARKET ASSESSMENT", "MY EDGE", "KEY RISKS")):
+            break
+        if in_verdict:
+            for o in outcomes:
+                if o.lower() in line.lower():
+                    return o
+    return None
+
+
+def generate_reasoning(agent, opp):
+    """Generate reasoning and return (reasoning_text, chosen_outcome_index)."""
     outcomes = opp.get("outcomes", [])
     probs = opp.get("probabilities", [])
-    chosen = outcomes[outcome_idx] if outcome_idx < len(outcomes) else "Unknown"
-    prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
 
     # Fetch web context before building prompt
     web_context = search_for_context(opp["question"], opp.get("category", ""))
     context_block = f"\n\nWEB CONTEXT:\n{web_context}" if web_context else ""
 
-    # Stage 1: Blind reasoning — no prices, just question + outcomes + web context
+    # Stage 1: Blind reasoning — no prices, agent picks its own outcome
     if opp["type"] == "event":
         outcome_lines = "\n".join(
             f"  - {outcomes[i]}" for i in range(min(len(outcomes), 12))
@@ -252,8 +282,8 @@ def generate_reasoning(agent, opp, outcome_idx):
             f"Category: {opp['category']}\n"
             f"Available outcomes:\n{outcome_lines}\n"
             f"{context_block}\n\n"
-            f"You are betting on: {chosen}\n"
-            f"Using only the information above and your own knowledge, complete ALL four sections below.\n\n"
+            f"You must choose ONE outcome to bet on. Analyse all options and select the one you have most conviction in.\n"
+            f"Using only the information above and your own knowledge, complete ALL sections below.\n\n"
             f"{REASONING_FORMAT}"
         )
     else:
@@ -262,16 +292,10 @@ def generate_reasoning(agent, opp, outcome_idx):
             f"Category: {opp['category']}\n"
             f"Outcomes: {', '.join(outcomes)}\n"
             f"{context_block}\n\n"
-            f"You are betting: {chosen}\n"
-            f"Using only the information above and your own knowledge, complete ALL four sections below.\n\n"
+            f"You must choose ONE outcome to bet on. Analyse all options and select the one you have most conviction in.\n"
+            f"Using only the information above and your own knowledge, complete ALL sections below.\n\n"
             f"{REASONING_FORMAT}"
         )
-
-    # Stage 2: Price check appended after VERDICT
-    user_prompt += (
-        f"\n\nPRICE CHECK: The market currently prices {chosen} at {prob:.1%}. "
-        f"Note in one sentence whether this is higher or lower than your estimate."
-    )
 
     provider = agent.get("provider", "anthropic")
     model = agent.get("model", "claude-sonnet-4")
@@ -280,16 +304,14 @@ def generate_reasoning(agent, opp, outcome_idx):
         if provider == "openai" and openai_client:
             resp = openai_client.chat.completions.create(
                 model=model,
-                max_tokens=400,
+                max_tokens=500,
                 messages=[
                     {"role": "system", "content": agent["system"]},
                     {"role": "user", "content": user_prompt},
                 ],
             )
-            return resp.choices[0].message.content.strip()
-        # Fall back to Claude for all agents when OpenAI is unavailable
-        if claude_client:
-            # Use Claude model — if agent is assigned GPT, fall back to Sonnet
+            reasoning = resp.choices[0].message.content.strip()
+        elif claude_client:
             if provider == "openai":
                 claude_model = "claude-sonnet-4-20250514"
             elif model == "claude-haiku-4-5-20251001":
@@ -298,16 +320,37 @@ def generate_reasoning(agent, opp, outcome_idx):
                 claude_model = "claude-sonnet-4-20250514"
             resp = claude_client.messages.create(
                 model=claude_model,
-                max_tokens=400,
+                max_tokens=500,
                 system=agent["system"],
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            return resp.content[0].text.strip()
+            reasoning = resp.content[0].text.strip()
         else:
-            return f"Taking {chosen} at {prob:.0%} based on current analysis."
+            # No AI client — fall back to random outcome
+            idx = random.randrange(len(outcomes))
+            return f"Taking {outcomes[idx]} based on current analysis.", idx
     except Exception as e:
         print(f"  [!] AI API error ({provider}/{model}): {e}")
-        return f"Taking {chosen} at {prob:.0%} based on current analysis."
+        idx = random.randrange(len(outcomes))
+        return f"Taking {outcomes[idx]} based on current analysis.", idx
+
+    # Parse the agent's chosen outcome
+    chosen = _parse_chosen_outcome(reasoning, outcomes)
+    if chosen:
+        outcome_idx = outcomes.index(chosen)
+    else:
+        # Agent didn't clearly state a choice — fall back to random
+        outcome_idx = random.randrange(len(outcomes))
+        chosen = outcomes[outcome_idx]
+        print(f"  [!] Could not parse outcome from reasoning, falling back to '{chosen}'")
+
+    # Stage 2: Append price check now that we know which outcome was chosen
+    prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
+    reasoning += (
+        f"\n\nPRICE CHECK: The market currently prices {chosen} at {prob:.1%}. "
+    )
+
+    return reasoning, outcome_idx
 
 
 def place_bet(agent, opp, outcome_idx, reasoning):
@@ -643,8 +686,7 @@ def run_cycle(opportunities):
         if not opp:
             continue
 
-        outcome_idx = pick_outcome(agent, opp)
-        reasoning = generate_reasoning(agent, opp, outcome_idx)
+        reasoning, outcome_idx = generate_reasoning(agent, opp)
         result = place_bet(agent, opp, outcome_idx, reasoning)
         if result is not None:
             _record_bet(name)
