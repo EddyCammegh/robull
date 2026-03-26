@@ -11,7 +11,7 @@ Usage:
   python run_agents.py
 """
 
-import os, sys, time, random, json
+import os, sys, time, random, json, re
 from pathlib import Path
 from dotenv import load_dotenv
 import requests
@@ -112,10 +112,28 @@ def search_for_context(question: str, category: str) -> str:
             title = r.get("title", "")
             content = r.get("content", "")[:200]
             parts.append(f"- {title}: {content}")
-        return "\n".join(parts)
+        return _strip_market_probabilities("\n".join(parts))
     except Exception as e:
         print(f"  [!] Tavily search failed: {e}")
         return ""
+
+
+# Patterns that look like market probabilities leaked into web search results
+_PROB_PATTERNS = re.compile(
+    r'\d+\.?\d*%\s*(?:probability|chance|likely|likelihood)'  # "65% probability"
+    r'|(?:priced|trading|valued|quoted)\s+at\s+\d+\.?\d*%'   # "priced at 65%"
+    r'|(?:probability|chance|odds)\s+(?:of\s+)?\d+\.?\d*%'    # "probability of 65%"
+    r'|\b(?:yes|no)\s+\d+\.?\d*[¢%]'                         # "Yes 65¢" / "Yes 65%"
+    r'|\d+\.?\d*[¢%]\s+(?:yes|no)\b'                         # "65¢ Yes"
+    r'|\b\d+\.?\d*%\s*(?:→|->|to)\s*\d+\.?\d*%'              # "45% → 62%"
+    r'|(?:currently|now)\s+(?:at\s+)?\d+\.?\d*%'              # "currently at 65%"
+    , re.IGNORECASE
+)
+
+
+def _strip_market_probabilities(text: str) -> str:
+    """Remove percentage figures that look like market probabilities from web context."""
+    return _PROB_PATTERNS.sub('', text).strip()
 
 
 def fetch_markets():
@@ -235,7 +253,7 @@ def generate_reasoning(agent, opp, outcome_idx):
             f"Available outcomes:\n{outcome_lines}\n"
             f"{context_block}\n\n"
             f"You are betting on: {chosen}\n"
-            f"Based on the question, outcomes, and any web context above, form your OWN probability estimate for each outcome BEFORE seeing market prices.\n\n"
+            f"Using only the information above and your own knowledge, complete ALL four sections below.\n\n"
             f"{REASONING_FORMAT}"
         )
     else:
@@ -245,28 +263,15 @@ def generate_reasoning(agent, opp, outcome_idx):
             f"Outcomes: {', '.join(outcomes)}\n"
             f"{context_block}\n\n"
             f"You are betting: {chosen}\n"
-            f"Based on the question, outcomes, and any web context above, form your OWN probability estimate BEFORE seeing the market price.\n\n"
+            f"Using only the information above and your own knowledge, complete ALL four sections below.\n\n"
             f"{REASONING_FORMAT}"
         )
 
-    # Stage 2: Append market price reveal after reasoning format
-    if opp["type"] == "event":
-        price_lines = "\n".join(
-            f"  - {outcomes[i]}: {probs[i]:.1%}" for i in range(min(len(outcomes), 12))
-        )
-        user_prompt += (
-            f"\n\n--- MARKET PRICE REVEAL ---\n"
-            f"Actual market prices:\n{price_lines}\n"
-            f"Your chosen outcome ({chosen}) is priced at {prob:.1%}.\n"
-            f"Note any divergence between your independent estimate and the market price in your VERDICT."
-        )
-    else:
-        user_prompt += (
-            f"\n\n--- MARKET PRICE REVEAL ---\n"
-            f"Actual market prices: {', '.join(f'{o}: {p:.1%}' for o, p in zip(outcomes, probs))}\n"
-            f"Your chosen outcome ({chosen}) is priced at {prob:.1%}.\n"
-            f"Note any divergence between your independent estimate and the market price in your VERDICT."
-        )
+    # Stage 2: Price check appended after VERDICT
+    user_prompt += (
+        f"\n\nPRICE CHECK: The market currently prices {chosen} at {prob:.1%}. "
+        f"Note in one sentence whether this is higher or lower than your estimate."
+    )
 
     provider = agent.get("provider", "anthropic")
     model = agent.get("model", "claude-sonnet-4")
