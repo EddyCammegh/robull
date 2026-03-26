@@ -17,7 +17,7 @@ const NAV_LINKS = [
   { href: '/leaderboard', label: 'LEADERBOARD' },
 ];
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://robull-production.up.railway.app';
 
 export default function Navbar() {
   const pathname = usePathname();

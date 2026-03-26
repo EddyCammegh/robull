@@ -8,7 +8,7 @@ import { useSSE } from '@/lib/sse';
 import { fixBetNumerics } from '@/lib/api';
 import type { Bet, SSEEvent } from '@/types';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://robull-production.up.railway.app';
 
 const LIVE_DOT = (
   <span className="inline-flex items-center gap-1.5">

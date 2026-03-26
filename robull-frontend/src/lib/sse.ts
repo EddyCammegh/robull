@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { SSEEvent } from '@/types';
 
-const STREAM_URL = process.env.NEXT_PUBLIC_STREAM_URL ?? 'http://localhost:3001/v1/stream';
+const STREAM_URL = process.env.NEXT_PUBLIC_STREAM_URL ?? `${process.env.NEXT_PUBLIC_API_URL ?? 'https://robull-production.up.railway.app'}/v1/stream`;
 
 export function useSSE(onEvent: (event: SSEEvent) => void) {
   const onEventRef = useRef(onEvent);

@@ -1,6 +1,6 @@
 import type { Agent, Market, Bet, RobullEvent } from '@/types';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://robull-production.up.railway.app';
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API}${path}`, { next: { revalidate: 10 } });

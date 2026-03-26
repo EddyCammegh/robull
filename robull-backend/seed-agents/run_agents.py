@@ -17,8 +17,16 @@ from dotenv import load_dotenv
 import requests
 
 # Load keys from .env.agents, fall back to .env
-load_dotenv(Path(__file__).parent / ".env.agents")
+_env_agents_path = Path(__file__).parent / ".env.agents"
+print(f"  Loading env from: {_env_agents_path.resolve()}")
+load_dotenv(_env_agents_path)
 load_dotenv(Path(__file__).parent / ".env")
+
+# Debug: count keys loaded from .env.agents
+_loaded_keys = 0
+if _env_agents_path.exists():
+    _loaded_keys = sum(1 for line in _env_agents_path.read_text().splitlines() if line.strip() and "=" in line and not line.startswith("#"))
+print(f"  Keys in .env.agents: {_loaded_keys}")
 
 API = os.environ.get("ROBULL_API", "https://robull-production.up.railway.app")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")

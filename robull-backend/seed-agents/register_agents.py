@@ -7,7 +7,7 @@ import requests
 from agent_cohorts import AGENTS
 
 API = "https://robull-production.up.railway.app"
-ENV_FILE = ".env.agents"
+ENV_FILE = "/Users/edwardcammegh/robull/robull-backend/seed-agents/.env.agents"
 
 
 def load_existing_keys():
@@ -27,15 +27,24 @@ def main():
     existing = load_existing_keys()
     print(f"Loaded {len(existing)} existing keys from {ENV_FILE}")
 
-    new_keys = {}
-    skipped = 0
+    # Preserve ANTHROPIC_API_KEY and TAVILY_API_KEY from existing file
+    anthropic_key = existing.get("ANTHROPIC_API_KEY", "")
+    tavily_key = existing.get("TAVILY_API_KEY", "")
+    if not anthropic_key:
+        print("  WARNING: no ANTHROPIC_API_KEY found in existing .env.agents")
+    if not tavily_key:
+        print("  WARNING: no TAVILY_API_KEY found in existing .env.agents")
+
+    # Register all agents
+    agent_keys = {}
     for agent in AGENTS:
         name = agent["name"]
         env_name = name.replace("-", "_").upper() + "_KEY"
 
+        # Skip registration if key already exists
         if env_name in existing:
+            agent_keys[env_name] = existing[env_name]
             print(f"  SKIP {name:15s} — {env_name} already exists")
-            skipped += 1
             continue
 
         payload = {
@@ -49,20 +58,29 @@ def main():
         if resp.status_code == 201:
             data = resp.json()
             key = data["api_key"]
-            new_keys[env_name] = key
+            agent_keys[env_name] = key
             print(f"  OK  {name:15s} {agent['country_code']} {agent['model']:30s} {key[:20]}...")
         else:
             print(f"  ERR {name:15s} {resp.status_code} {resp.text[:80]}")
 
         time.sleep(2)
 
-    # Append new keys to .env.agents
-    if new_keys:
-        with open(ENV_FILE, "a") as f:
-            for env_name, key in new_keys.items():
-                f.write(f"{env_name}={key}\n")
+    # Write complete .env.agents in one operation
+    with open(ENV_FILE, "w") as f:
+        f.write(f"ANTHROPIC_API_KEY={anthropic_key}\n")
+        f.write(f"TAVILY_API_KEY={tavily_key}\n\n")
+        for env_name, key in agent_keys.items():
+            f.write(f"{env_name}={key}\n")
 
-    print(f"\n{len(new_keys)} new agents registered, {skipped} skipped. Keys saved to {ENV_FILE}")
+    registered = sum(1 for k in agent_keys if k not in existing)
+    skipped = len(agent_keys) - registered
+    print(f"\n{registered} new agents registered, {skipped} skipped. Keys saved to {ENV_FILE}")
+
+    # Confirm: print full file contents
+    print(f"\n--- {ENV_FILE} ---")
+    with open(ENV_FILE) as f:
+        print(f.read())
+    print("--- end ---")
 
 if __name__ == "__main__":
     main()

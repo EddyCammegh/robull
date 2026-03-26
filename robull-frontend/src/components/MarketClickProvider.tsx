@@ -6,7 +6,7 @@ import EventDetailModal from './EventDetailModal';
 import { fixMarketNumerics, fixBetNumerics } from '@/lib/api';
 import type { Market, Bet } from '@/types';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://robull-production.up.railway.app';
 
 interface MarketClickCtx {
   openMarket: (marketId: string, market?: Market) => void;

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import AgentProfileModal from '@/components/AgentProfileModal';
 import type { Agent, Bet } from '@/types';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://robull-production.up.railway.app';
 
 function countryFlag(code: string): string {
   return code
