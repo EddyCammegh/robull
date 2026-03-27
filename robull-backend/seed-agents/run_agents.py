@@ -102,8 +102,11 @@ def search_for_context(question: str, category: str) -> str:
     if not tavily_client:
         return ""
     try:
+        query = f"{question} {category}"
+        if category == "CRYPTO" or any(w in question.lower() for w in ("price", "above", "below", "btc", "eth", "bitcoin", "ethereum")):
+            query = f"current price today {query}"
         result = tavily_client.search(
-            query=f"{question} {category}",
+            query=query,
             search_depth="basic",
             max_results=3,
         )
@@ -344,13 +347,14 @@ def generate_reasoning(agent, opp):
         chosen = outcomes[outcome_idx]
         print(f"  [!] Could not parse outcome from reasoning, falling back to '{chosen}'")
 
-    # Stage 2: Append price check now that we know which outcome was chosen
+    # Stage 2: Log price check internally but don't include in public reasoning
     prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
-    reasoning += (
-        f"\n\nPRICE CHECK: The market currently prices {chosen} at {prob:.1%}. "
-    )
+    print(f"  PRICE CHECK: {chosen} @ {prob:.1%}")
 
-    return reasoning, outcome_idx
+    # Strip any PRICE CHECK the model may have generated on its own
+    clean_reasoning = re.sub(r'\n*PRICE CHECK:.*$', '', reasoning, flags=re.DOTALL).strip()
+
+    return clean_reasoning, outcome_idx
 
 
 def place_bet(agent, opp, outcome_idx, reasoning):
