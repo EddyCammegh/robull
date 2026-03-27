@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { processMarketPayouts } from '../services/payouts.js';
 import { calculateMaxBet } from '../config.js';
+import { syncMarkets } from '../cron/syncMarkets.js';
 
 const ADMIN_KEY = 'robull-reset-2026';
 
@@ -124,5 +125,22 @@ export default async function adminRoutes(app: FastifyInstance) {
       deleted_activity: activityDeleted ?? 0,
       agents: rows.map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })),
     });
+  });
+
+  // POST /v1/admin/force-sync — trigger market sync immediately
+  app.post('/force-sync', async (req, reply) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const start = Date.now();
+    try {
+      await syncMarkets(app.db, app.redis);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      return reply.send({ ok: true, elapsed_seconds: elapsed });
+    } catch (err: any) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      return reply.status(500).send({ ok: false, elapsed_seconds: elapsed, error: err.message });
+    }
   });
 }

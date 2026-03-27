@@ -221,22 +221,44 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     // NEVER touch child markets (event_id IS NOT NULL) — they are managed by event sync.
     const MIN_VOL_DEFAULT = 500_000;
     const MIN_VOL_CRYPTO_MACRO = 50_000;
+    const EXCEPTIONAL_VOL = 5_000_000;
+    const GOOD_KEYWORDS = /\b(CPI|NFP|Fed|GDP|PCE|earnings|beat|rate|inflation|jobs|unemployment|Bitcoin|BTC|ETH|price|above|below|pass|vote|decision|announce|release|report|election|poll|approve|sign|deal|agreement|cut|hike|hold|default|launch|IPO|merge|acquire)\b/i;
+
     const { rows: allMarkets } = await db.query(
-      `SELECT id, question, category, volume, initial_probs FROM markets WHERE resolved = false AND event_id IS NULL`
+      `SELECT id, question, category, volume, initial_probs, closes_at FROM markets WHERE resolved = false AND event_id IS NULL`
     );
+    const now = Date.now();
     let cleaned = 0;
     for (const row of allMarkets) {
       const vol = typeof row.volume === 'string' ? parseFloat(row.volume) : row.volume;
       const probs: number[] = Array.isArray(row.initial_probs) ? row.initial_probs : [];
       const cat = row.category as string;
       const minVol = (cat === 'CRYPTO' || cat === 'MACRO') ? MIN_VOL_CRYPTO_MACRO : MIN_VOL_DEFAULT;
+      const daysToClose = row.closes_at ? (new Date(row.closes_at).getTime() - now) / 86_400_000 : 999;
+
+      // Existing quality filters
       if (isExcludedCategory(cat) || isF1Market(row.question) || vol < minVol || isLowQualityMarket(row.question, probs)) {
         await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
         cleaned++;
+        continue;
+      }
+
+      // Time-to-close filter: >7 days excluded unless exceptional volume
+      if (daysToClose > 7 && vol < EXCEPTIONAL_VOL) {
+        await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
+        cleaned++;
+        continue;
+      }
+
+      // Keyword relevance filter: question must contain at least one good keyword
+      if (!GOOD_KEYWORDS.test(row.question)) {
+        await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
+        cleaned++;
+        continue;
       }
     }
     if (cleaned > 0) {
-      console.log(`[cron] Cleanup: resolved ${cleaned} standalone markets that fail quality filters.`);
+      console.log(`[cron] Cleanup: resolved ${cleaned} standalone markets that fail quality/time/keyword filters.`);
     }
 
     // Enforce close buffer — resolve markets within 10 min of closes_at
@@ -312,52 +334,115 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       console.log(`[cron] Backfill total: ${totalFilled} winning outcomes set.`);
     }
 
-    // ── Backfill / trim: maintain exactly 150 active slots ───────────────
+    // ── Backfill / trim: maintain active slots with time-to-close tiers ──
+    // Tier caps: ≤72h → up to 100 slots, 3-7d → up to 20 slots, >7d → only exceptional volume (>$5M)
     // Events count as 1 slot regardless of child markets. Standalone markets = 1 slot.
     const TARGET_ACTIVE = 150;
-    const { rows: [{ standalone }] } = await db.query(
-      `SELECT COUNT(*)::int AS standalone FROM markets WHERE resolved = false AND event_id IS NULL`
-    );
+    const TIER_CAP_URGENT = 100;  // ≤72h
+    const TIER_CAP_SOON = 20;     // 3-7d
+
     const { rows: [{ event_count }] } = await db.query(
       `SELECT COUNT(DISTINCT event_id)::int AS event_count FROM markets WHERE resolved = false AND event_id IS NOT NULL`
     );
-    const activeCount = (standalone as number) + (event_count as number);
+    const eventSlots = event_count as number;
 
-    if (activeCount < TARGET_ACTIVE) {
-      const slots = TARGET_ACTIVE - activeCount;
-      // Best candidates: resolved, still in current API fetch (confirmed active
-      // on Polymarket), ordered by volume so highest-signal markets fill first.
-      const { rows: candidates } = await db.query(
-        `SELECT id, polymarket_id FROM markets
-         WHERE resolved = true AND event_id IS NULL
-         ORDER BY volume DESC`
+    // Count active standalone markets by time tier
+    const { rows: tierCounts } = await db.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE closes_at <= NOW() + INTERVAL '3 days')::int AS urgent,
+         COUNT(*) FILTER (WHERE closes_at > NOW() + INTERVAL '3 days' AND closes_at <= NOW() + INTERVAL '7 days')::int AS soon,
+         COUNT(*) FILTER (WHERE closes_at > NOW() + INTERVAL '7 days' OR closes_at IS NULL)::int AS distant
+       FROM markets WHERE resolved = false AND event_id IS NULL`
+    );
+    const tc = tierCounts[0];
+    const standaloneCount = (tc.urgent as number) + (tc.soon as number) + (tc.distant as number);
+    const activeCount = standaloneCount + eventSlots;
+
+    // Trim: enforce tier caps on standalone markets
+    // Distant (>7d): trim all except exceptional volume
+    if ((tc.distant as number) > 0) {
+      const { rowCount: distantTrimmed } = await db.query(
+        `UPDATE markets SET resolved = true, updated_at = NOW()
+         WHERE id IN (
+           SELECT id FROM markets
+           WHERE resolved = false AND event_id IS NULL
+             AND (closes_at > NOW() + INTERVAL '7 days' OR closes_at IS NULL)
+             AND volume < $1
+         )`,
+        [EXCEPTIONAL_VOL]
       );
-      let activated = 0;
-      for (const c of candidates) {
-        if (activated >= slots) break;
-        if (!fetchedIds.has(c.polymarket_id)) continue;
-        await db.query(
-          'UPDATE markets SET resolved = false, updated_at = NOW() WHERE id = $1',
-          [c.id]
-        );
-        activated++;
+      if (distantTrimmed && distantTrimmed > 0) {
+        console.log(`[cron] Trimmed ${distantTrimmed} distant (>7d) standalone markets below $5M volume.`);
       }
-      if (activated > 0) {
-        console.log(`[cron] Backfill: activated ${activated} markets (${activeCount} → ${activeCount + activated}).`);
-      }
-    } else if (activeCount > TARGET_ACTIVE) {
-      const excess = activeCount - TARGET_ACTIVE;
+    }
+
+    // Soon (3-7d): trim to cap
+    if ((tc.soon as number) > TIER_CAP_SOON) {
+      const excess = (tc.soon as number) - TIER_CAP_SOON;
       await db.query(
         `UPDATE markets SET resolved = true, updated_at = NOW()
          WHERE id IN (
            SELECT id FROM markets
            WHERE resolved = false AND event_id IS NULL
+             AND closes_at > NOW() + INTERVAL '3 days'
+             AND closes_at <= NOW() + INTERVAL '7 days'
            ORDER BY volume ASC
            LIMIT $1
          )`,
         [excess]
       );
-      console.log(`[cron] Trimmed ${excess} lowest-volume standalone markets (${activeCount} → ${TARGET_ACTIVE}).`);
+      console.log(`[cron] Trimmed ${excess} soon (3-7d) standalone markets to cap of ${TIER_CAP_SOON}.`);
+    }
+
+    // Backfill: if under target, fill urgent tier first (≤72h), then soon (3-7d)
+    const { rows: [{ current_standalone }] } = await db.query(
+      `SELECT COUNT(*)::int AS current_standalone FROM markets WHERE resolved = false AND event_id IS NULL`
+    );
+    const currentActive = (current_standalone as number) + eventSlots;
+
+    if (currentActive < TARGET_ACTIVE) {
+      const slotsAvailable = TARGET_ACTIVE - currentActive;
+
+      // Fill urgent tier first (≤72h closing, keyword match, volume ordered)
+      const { rows: urgentCandidates } = await db.query(
+        `SELECT id, polymarket_id, question FROM markets
+         WHERE resolved = true AND event_id IS NULL
+           AND closes_at <= NOW() + INTERVAL '3 days'
+           AND closes_at > NOW()
+         ORDER BY volume DESC`
+      );
+      let activated = 0;
+      for (const c of urgentCandidates) {
+        if (activated >= slotsAvailable) break;
+        if (activated >= TIER_CAP_URGENT) break;
+        if (!fetchedIds.has(c.polymarket_id)) continue;
+        if (!GOOD_KEYWORDS.test(c.question)) continue;
+        await db.query('UPDATE markets SET resolved = false, updated_at = NOW() WHERE id = $1', [c.id]);
+        activated++;
+      }
+
+      // Then fill soon tier (3-7d)
+      const soonSlots = Math.min(slotsAvailable - activated, TIER_CAP_SOON);
+      if (soonSlots > 0) {
+        const { rows: soonCandidates } = await db.query(
+          `SELECT id, polymarket_id, question FROM markets
+           WHERE resolved = true AND event_id IS NULL
+             AND closes_at > NOW() + INTERVAL '3 days'
+             AND closes_at <= NOW() + INTERVAL '7 days'
+           ORDER BY volume DESC`
+        );
+        for (const c of soonCandidates) {
+          if (activated >= slotsAvailable) break;
+          if (!fetchedIds.has(c.polymarket_id)) continue;
+          if (!GOOD_KEYWORDS.test(c.question)) continue;
+          await db.query('UPDATE markets SET resolved = false, updated_at = NOW() WHERE id = $1', [c.id]);
+          activated++;
+        }
+      }
+
+      if (activated > 0) {
+        console.log(`[cron] Backfill: activated ${activated} markets (${currentActive} → ${currentActive + activated}).`);
+      }
     }
 
     // Record price history snapshots for sparkline charts
