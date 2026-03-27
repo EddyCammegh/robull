@@ -127,6 +127,45 @@ export default async function adminRoutes(app: FastifyInstance) {
     });
   });
 
+  // POST /v1/admin/reset-markets — wipe all markets/events and re-sync from Polymarket
+  app.post('/reset-markets', async (req, reply) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const start = Date.now();
+    try {
+      // Delete in dependency order: bets → price_history → event_agent_activity → markets → events
+      const { rowCount: bets } = await app.db.query('DELETE FROM bets');
+      const { rowCount: priceHistory } = await app.db.query('DELETE FROM price_history');
+      const { rowCount: activity } = await app.db.query('DELETE FROM event_agent_activity');
+      const { rowCount: markets } = await app.db.query('DELETE FROM markets');
+      const { rowCount: events } = await app.db.query('DELETE FROM events');
+
+      const deleteElapsed = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(`[admin] reset-markets: deleted ${bets} bets, ${priceHistory} price_history, ${activity} activity, ${markets} markets, ${events} events in ${deleteElapsed}s`);
+
+      // Re-sync from Polymarket
+      await syncMarkets(app.db, app.redis);
+      const totalElapsed = ((Date.now() - start) / 1000).toFixed(1);
+
+      return reply.send({
+        ok: true,
+        deleted: {
+          bets: bets ?? 0,
+          price_history: priceHistory ?? 0,
+          event_agent_activity: activity ?? 0,
+          markets: markets ?? 0,
+          events: events ?? 0,
+        },
+        elapsed_seconds: totalElapsed,
+      });
+    } catch (err: any) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      return reply.status(500).send({ ok: false, elapsed_seconds: elapsed, error: err.message });
+    }
+  });
+
   // POST /v1/admin/force-sync — trigger market sync immediately
   app.post('/force-sync', async (req, reply) => {
     if (req.headers['x-admin-key'] !== ADMIN_KEY) {
