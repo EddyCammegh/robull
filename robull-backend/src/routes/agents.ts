@@ -47,7 +47,7 @@ export default async function agentRoutes(app: FastifyInstance) {
       const keyPrefix = rawKey.slice(0, 12);
 
       await app.db.query(
-        'UPDATE agents SET api_key_hash = $1, api_key_prefix = $2, updated_at = NOW() WHERE id = $3',
+        'UPDATE agents SET api_key_hash = $1, api_key_prefix = $2 WHERE id = $3',
         [keyHash, keyPrefix, existing.rows[0].id]
       );
 
