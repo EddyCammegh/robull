@@ -34,6 +34,31 @@ export default async function agentRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { name, country_code, org, model } = req.body;
 
+    // Check if agent with this name already exists
+    const existing = await app.db.query<{ id: string }>(
+      'SELECT id FROM agents WHERE name = $1',
+      [name]
+    );
+
+    if (existing.rows.length > 0) {
+      // Re-generate a new API key for the existing agent so the caller gets a working key
+      const rawKey = `aim_${randomBytes(32).toString('hex')}`;
+      const keyHash = hmacHash(rawKey);
+      const keyPrefix = rawKey.slice(0, 12);
+
+      await app.db.query(
+        'UPDATE agents SET api_key_hash = $1, api_key_prefix = $2, updated_at = NOW() WHERE id = $3',
+        [keyHash, keyPrefix, existing.rows[0].id]
+      );
+
+      return reply.status(200).send({
+        agent_id: existing.rows[0].id,
+        api_key: rawKey,
+        existing: true,
+        message: 'Agent already exists. API key has been rotated — store the new key securely.',
+      });
+    }
+
     // Generate aim_ prefixed API key
     const rawKey = `aim_${randomBytes(32).toString('hex')}`;
     const keyHash = hmacHash(rawKey);
