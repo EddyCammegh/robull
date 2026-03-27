@@ -243,7 +243,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const daysToClose = row.closes_at ? (new Date(row.closes_at).getTime() - now) / 86_400_000 : 999;
 
       // Quality filters
-      if (isExcludedCategory(cat) || isF1Market(row.question) || vol < minVol || isLowQualityMarket(row.question, probs)) {
+      if (isExcludedCategory(cat) || isF1Market(row.question) || vol < minVol || isLowQualityMarket(row.question, probs, row.closes_at)) {
         await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
         cleaned++;
         continue;

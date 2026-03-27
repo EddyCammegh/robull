@@ -363,7 +363,7 @@ export function isF1Market(question: string): boolean {
   return F1_RE.test(question);
 }
 
-export function isLowQualityMarket(question: string, probs: number[]): boolean {
+export function isLowQualityMarket(question: string, probs: number[], closesAt?: string | Date | null): boolean {
   // Weather markets
   if (WEATHER_RE.test(question)) return true;
 
@@ -378,6 +378,12 @@ export function isLowQualityMarket(question: string, probs: number[]): boolean {
 
   // F1 markets excluded regardless of category
   if (isF1Market(question)) return true;
+
+  // Markets closing more than 365 days away — too distant to be actionable
+  if (closesAt) {
+    const daysToClose = (new Date(closesAt).getTime() - Date.now()) / 86_400_000;
+    if (daysToClose > 365) return true;
+  }
 
   return false;
 }
