@@ -217,17 +217,23 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       console.log(`[cron] Reclassified ${reclassified} markets.`);
     }
 
-    // ── Cleanup: resolve STANDALONE markets that fail the new filters ─────
-    // NEVER touch child markets (event_id IS NOT NULL) — they are managed by event sync.
+    // ── Aggressive time-to-close + quality cleanup ─────────────────────
+    // Applies to ALL active standalone markets and events every sync cycle.
+    // ≤3 days: keep regardless of volume
+    // 3-7 days: deactivate unless volume > $2M
+    // >7 days: deactivate unless volume > $10M
     const MIN_VOL_DEFAULT = 500_000;
     const MIN_VOL_CRYPTO_MACRO = 50_000;
-    const EXCEPTIONAL_VOL = 5_000_000;
+    const VOL_THRESHOLD_SOON = 2_000_000;     // 3-7 days
+    const VOL_THRESHOLD_DISTANT = 10_000_000;  // >7 days
     const GOOD_KEYWORDS = /\b(CPI|NFP|Fed|GDP|PCE|earnings|beat|rate|inflation|jobs|unemployment|Bitcoin|BTC|ETH|price|above|below|pass|vote|decision|announce|release|report|election|poll|approve|sign|deal|agreement|cut|hike|hold|default|launch|IPO|merge|acquire)\b/i;
 
+    const now = Date.now();
+
+    // ── Standalone markets cleanup ──
     const { rows: allMarkets } = await db.query(
       `SELECT id, question, category, volume, initial_probs, closes_at FROM markets WHERE resolved = false AND event_id IS NULL`
     );
-    const now = Date.now();
     let cleaned = 0;
     for (const row of allMarkets) {
       const vol = typeof row.volume === 'string' ? parseFloat(row.volume) : row.volume;
@@ -236,22 +242,27 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       const minVol = (cat === 'CRYPTO' || cat === 'MACRO') ? MIN_VOL_CRYPTO_MACRO : MIN_VOL_DEFAULT;
       const daysToClose = row.closes_at ? (new Date(row.closes_at).getTime() - now) / 86_400_000 : 999;
 
-      // Existing quality filters
+      // Quality filters
       if (isExcludedCategory(cat) || isF1Market(row.question) || vol < minVol || isLowQualityMarket(row.question, probs)) {
         await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
         cleaned++;
         continue;
       }
 
-      // Time-to-close filter: >7 days excluded unless exceptional volume
-      if (daysToClose > 7 && vol < EXCEPTIONAL_VOL) {
+      // Keyword relevance filter
+      if (!GOOD_KEYWORDS.test(row.question)) {
         await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
         cleaned++;
         continue;
       }
 
-      // Keyword relevance filter: question must contain at least one good keyword
-      if (!GOOD_KEYWORDS.test(row.question)) {
+      // Time-to-close volume gates (≤3 days always kept)
+      if (daysToClose > 7 && vol < VOL_THRESHOLD_DISTANT) {
+        await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
+        cleaned++;
+        continue;
+      }
+      if (daysToClose > 3 && vol < VOL_THRESHOLD_SOON) {
         await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE id = $1', [row.id]);
         cleaned++;
         continue;
@@ -259,6 +270,32 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     }
     if (cleaned > 0) {
       console.log(`[cron] Cleanup: resolved ${cleaned} standalone markets that fail quality/time/keyword filters.`);
+    }
+
+    // ── Events cleanup: same time-to-close volume gates ──
+    const { rows: allEvents } = await db.query(
+      `SELECT id, title, volume, closes_at FROM events WHERE resolved = false`
+    );
+    let eventsCleaned = 0;
+    for (const evt of allEvents) {
+      const vol = typeof evt.volume === 'string' ? parseFloat(evt.volume) : evt.volume;
+      const daysToClose = evt.closes_at ? (new Date(evt.closes_at).getTime() - now) / 86_400_000 : 999;
+
+      if (daysToClose > 7 && vol < VOL_THRESHOLD_DISTANT) {
+        await db.query('UPDATE events SET resolved = true, updated_at = NOW() WHERE id = $1', [evt.id]);
+        await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE event_id = $1', [evt.id]);
+        eventsCleaned++;
+        continue;
+      }
+      if (daysToClose > 3 && vol < VOL_THRESHOLD_SOON) {
+        await db.query('UPDATE events SET resolved = true, updated_at = NOW() WHERE id = $1', [evt.id]);
+        await db.query('UPDATE markets SET resolved = true, updated_at = NOW() WHERE event_id = $1', [evt.id]);
+        eventsCleaned++;
+        continue;
+      }
+    }
+    if (eventsCleaned > 0) {
+      console.log(`[cron] Cleanup: resolved ${eventsCleaned} events that fail time-to-close volume gates.`);
     }
 
     // Enforce close buffer — resolve markets within 10 min of closes_at
@@ -334,110 +371,44 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       console.log(`[cron] Backfill total: ${totalFilled} winning outcomes set.`);
     }
 
-    // ── Backfill / trim: maintain active slots with time-to-close tiers ──
-    // Tier caps: ≤72h → up to 100 slots, 3-7d → up to 20 slots, >7d → only exceptional volume (>$5M)
-    // Events count as 1 slot regardless of child markets. Standalone markets = 1 slot.
+    // ── Backfill: activate resolved markets that pass all filters ───────
+    // Prioritise ≤3 days (all volume), then 3-7d (>$2M), then >7d (>$10M).
     const TARGET_ACTIVE = 150;
-    const TIER_CAP_URGENT = 100;  // ≤72h
-    const TIER_CAP_SOON = 20;     // 3-7d
 
     const { rows: [{ event_count }] } = await db.query(
-      `SELECT COUNT(DISTINCT event_id)::int AS event_count FROM markets WHERE resolved = false AND event_id IS NOT NULL`
+      `SELECT COUNT(*)::int AS event_count FROM events WHERE resolved = false`
     );
-    const eventSlots = event_count as number;
-
-    // Count active standalone markets by time tier
-    const { rows: tierCounts } = await db.query(
-      `SELECT
-         COUNT(*) FILTER (WHERE closes_at <= NOW() + INTERVAL '3 days')::int AS urgent,
-         COUNT(*) FILTER (WHERE closes_at > NOW() + INTERVAL '3 days' AND closes_at <= NOW() + INTERVAL '7 days')::int AS soon,
-         COUNT(*) FILTER (WHERE closes_at > NOW() + INTERVAL '7 days' OR closes_at IS NULL)::int AS distant
-       FROM markets WHERE resolved = false AND event_id IS NULL`
+    const { rows: [{ standalone_count }] } = await db.query(
+      `SELECT COUNT(*)::int AS standalone_count FROM markets WHERE resolved = false AND event_id IS NULL`
     );
-    const tc = tierCounts[0];
-    const standaloneCount = (tc.urgent as number) + (tc.soon as number) + (tc.distant as number);
-    const activeCount = standaloneCount + eventSlots;
-
-    // Trim: enforce tier caps on standalone markets
-    // Distant (>7d): trim all except exceptional volume
-    if ((tc.distant as number) > 0) {
-      const { rowCount: distantTrimmed } = await db.query(
-        `UPDATE markets SET resolved = true, updated_at = NOW()
-         WHERE id IN (
-           SELECT id FROM markets
-           WHERE resolved = false AND event_id IS NULL
-             AND (closes_at > NOW() + INTERVAL '7 days' OR closes_at IS NULL)
-             AND volume < $1
-         )`,
-        [EXCEPTIONAL_VOL]
-      );
-      if (distantTrimmed && distantTrimmed > 0) {
-        console.log(`[cron] Trimmed ${distantTrimmed} distant (>7d) standalone markets below $5M volume.`);
-      }
-    }
-
-    // Soon (3-7d): trim to cap
-    if ((tc.soon as number) > TIER_CAP_SOON) {
-      const excess = (tc.soon as number) - TIER_CAP_SOON;
-      await db.query(
-        `UPDATE markets SET resolved = true, updated_at = NOW()
-         WHERE id IN (
-           SELECT id FROM markets
-           WHERE resolved = false AND event_id IS NULL
-             AND closes_at > NOW() + INTERVAL '3 days'
-             AND closes_at <= NOW() + INTERVAL '7 days'
-           ORDER BY volume ASC
-           LIMIT $1
-         )`,
-        [excess]
-      );
-      console.log(`[cron] Trimmed ${excess} soon (3-7d) standalone markets to cap of ${TIER_CAP_SOON}.`);
-    }
-
-    // Backfill: if under target, fill urgent tier first (≤72h), then soon (3-7d)
-    const { rows: [{ current_standalone }] } = await db.query(
-      `SELECT COUNT(*)::int AS current_standalone FROM markets WHERE resolved = false AND event_id IS NULL`
-    );
-    const currentActive = (current_standalone as number) + eventSlots;
+    const currentActive = (standalone_count as number) + (event_count as number);
 
     if (currentActive < TARGET_ACTIVE) {
       const slotsAvailable = TARGET_ACTIVE - currentActive;
 
-      // Fill urgent tier first (≤72h closing, keyword match, volume ordered)
-      const { rows: urgentCandidates } = await db.query(
-        `SELECT id, polymarket_id, question FROM markets
-         WHERE resolved = true AND event_id IS NULL
-           AND closes_at <= NOW() + INTERVAL '3 days'
-           AND closes_at > NOW()
-         ORDER BY volume DESC`
+      // Candidates: resolved standalone markets still live on Polymarket, passing keyword filter
+      // Ordered by time-to-close ASC (soonest first), then volume DESC
+      const { rows: candidates } = await db.query(
+        `SELECT id, polymarket_id, question, volume, closes_at FROM markets
+         WHERE resolved = true AND event_id IS NULL AND closes_at > NOW()
+         ORDER BY closes_at ASC, volume DESC`
       );
+
       let activated = 0;
-      for (const c of urgentCandidates) {
+      for (const c of candidates) {
         if (activated >= slotsAvailable) break;
-        if (activated >= TIER_CAP_URGENT) break;
         if (!fetchedIds.has(c.polymarket_id)) continue;
         if (!GOOD_KEYWORDS.test(c.question)) continue;
+
+        const vol = typeof c.volume === 'string' ? parseFloat(c.volume) : c.volume;
+        const daysToClose = c.closes_at ? (new Date(c.closes_at).getTime() - now) / 86_400_000 : 999;
+
+        // Apply same volume gates as cleanup
+        if (daysToClose > 7 && vol < VOL_THRESHOLD_DISTANT) continue;
+        if (daysToClose > 3 && vol < VOL_THRESHOLD_SOON) continue;
+
         await db.query('UPDATE markets SET resolved = false, updated_at = NOW() WHERE id = $1', [c.id]);
         activated++;
-      }
-
-      // Then fill soon tier (3-7d)
-      const soonSlots = Math.min(slotsAvailable - activated, TIER_CAP_SOON);
-      if (soonSlots > 0) {
-        const { rows: soonCandidates } = await db.query(
-          `SELECT id, polymarket_id, question FROM markets
-           WHERE resolved = true AND event_id IS NULL
-             AND closes_at > NOW() + INTERVAL '3 days'
-             AND closes_at <= NOW() + INTERVAL '7 days'
-           ORDER BY volume DESC`
-        );
-        for (const c of soonCandidates) {
-          if (activated >= slotsAvailable) break;
-          if (!fetchedIds.has(c.polymarket_id)) continue;
-          if (!GOOD_KEYWORDS.test(c.question)) continue;
-          await db.query('UPDATE markets SET resolved = false, updated_at = NOW() WHERE id = $1', [c.id]);
-          activated++;
-        }
       }
 
       if (activated > 0) {
