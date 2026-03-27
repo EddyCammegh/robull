@@ -26,7 +26,10 @@ function getOutcomes(kind: 'market' | 'event', market?: Market, event?: RobullEv
   if (kind === 'market' && market) {
     const probs = liveProbs ?? market.current_probs ?? market.initial_probs ?? [];
     if (!market.outcomes?.length || !probs.length) return [];
-    return market.outcomes.slice(0, 2).map((label, i) => ({ label, probability: probs[i] ?? 0, isLeader: i === 0 }));
+    const isBinaryYesNo = market.outcomes.length === 2
+      && market.outcomes[0] === 'Yes' && market.outcomes[1] === 'No';
+    const limit = isBinaryYesNo ? 2 : 6;
+    return market.outcomes.slice(0, limit).map((label, i) => ({ label, probability: probs[i] ?? 0, isLeader: i === 0 }));
   }
   if (kind === 'event' && event?.outcomes?.length) {
     return [...event.outcomes]
@@ -99,7 +102,8 @@ export default function MarketPanel({ kind, market, event, badge, liveProbs }: M
   const id = kind === 'market' ? market!.id : event!.id;
 
   const allOutcomes = getOutcomes(kind, market, event, liveProbs);
-  const isBinary = allOutcomes.length <= 2;
+  const isBinary = allOutcomes.length <= 2
+    && allOutcomes.every(o => o.label === 'Yes' || o.label === 'No');
   const isIndep = kind === 'event' && event && (event.event_type === 'independent' || event.event_type === 'sports_props');
   const maxProb = allOutcomes.length > 0 ? allOutcomes[0].probability : 1;
 

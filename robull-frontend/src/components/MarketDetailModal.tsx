@@ -121,9 +121,13 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                       className="h-full rounded-full transition-all duration-500"
                       style={{
                         width: `${(probs[i] ?? 0) * 100}%`,
-                        background: isResolved
-                          ? (i === market.winning_outcome ? '#22c55e' : '#333333')
-                          : (i === 0 ? '#ff4400' : i === 1 ? '#555555' : '#333388'),
+                        background: (() => {
+                          if (isResolved) return i === market.winning_outcome ? '#22c55e' : '#333333';
+                          const isBinaryYesNo = market.outcomes.length === 2 && market.outcomes[0] === 'Yes' && market.outcomes[1] === 'No';
+                          if (isBinaryYesNo) return i === 0 ? '#ff4400' : '#555555';
+                          const colours = ['#FF4400', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#6B7280'];
+                          return colours[i % colours.length];
+                        })(),
                       }}
                     />
                   </div>

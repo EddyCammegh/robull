@@ -62,11 +62,12 @@ def main():
         }
 
         resp = requests.post(f"{API}/v1/agents/register", json=payload, timeout=30)
-        if resp.status_code == 201:
+        if resp.status_code in (200, 201):
             data = resp.json()
             key = data["api_key"]
             agent_keys[env_name] = key
-            print(f"  OK  {name:15s} {agent['country_code']} {agent['model']:30s} {key[:20]}...")
+            tag = "NEW" if resp.status_code == 201 else "EXISTS"
+            print(f"  {tag:6s} {name:15s} {agent['country_code']} {agent['model']:30s} {key[:20]}...")
         else:
             print(f"  ERR {name:15s} {resp.status_code} {resp.text[:80]}")
 

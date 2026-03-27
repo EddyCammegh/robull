@@ -187,27 +187,52 @@ export default function MarketRow({ market, liveProbs, badge }: MarketRowProps) 
         </div>
 
         {/* Probability bars */}
-        {probs.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 items-center">
-            {market.outcomes.map((outcome, i) => (
-              <div key={i} className="flex items-center gap-1.5 flex-shrink-0">
-                <div className="w-28 h-1.5 rounded-full bg-subtle overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${(probs[i] ?? 0) * 100}%`,
-                      background: i === 0 ? '#ff4400' : i === 1 ? '#555555' : '#333388',
-                    }}
-                  />
+        {probs.length > 0 && (() => {
+          const isBinaryYesNo = market.outcomes.length === 2
+            && market.outcomes[0] === 'Yes' && market.outcomes[1] === 'No';
+          const MULTI_COLOURS = ['#FF4400', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#6B7280'];
+          return isBinaryYesNo ? (
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 items-center">
+              {market.outcomes.map((outcome, i) => (
+                <div key={i} className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="w-28 h-1.5 rounded-full bg-subtle overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${(probs[i] ?? 0) * 100}%`,
+                        background: i === 0 ? '#ff4400' : '#555555',
+                      }}
+                    />
+                  </div>
+                  <span className="font-mono text-[10px] text-white font-semibold">
+                    {((probs[i] ?? 0) * 100).toFixed(1)}%
+                  </span>
+                  <span className="font-mono text-[10px] text-muted">{outcome}</span>
                 </div>
-                <span className="font-mono text-[10px] text-white font-semibold">
-                  {((probs[i] ?? 0) * 100).toFixed(1)}%
-                </span>
-                <span className="font-mono text-[10px] text-muted">{outcome}</span>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          ) : (
+            <div className="mt-2 space-y-1">
+              {market.outcomes.map((outcome, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-muted w-24 truncate flex-shrink-0">{outcome}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-subtle overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${(probs[i] ?? 0) * 100}%`,
+                        background: MULTI_COLOURS[i % MULTI_COLOURS.length],
+                      }}
+                    />
+                  </div>
+                  <span className="font-mono text-[10px] text-white font-semibold w-10 text-right flex-shrink-0">
+                    {((probs[i] ?? 0) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </button>
 
       {/* Expanded: BET button + all agent bets with full reasoning */}
