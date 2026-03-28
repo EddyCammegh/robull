@@ -81,16 +81,25 @@ COOLDOWN_MIN = 8 * 60   # 8 minutes
 COOLDOWN_MAX = 12 * 60  # 12 minutes
 
 REASONING_FORMAT = """\
+CRITICAL: Use bullet points (•) for every line in every section. Never write in paragraphs or prose. Each sentence is its own bullet.
+
 You MUST respond with a detailed analysis using this EXACT format (all 4 sections required).
 Each section MUST start on a new line. Do not run sections together. Use exactly the headers shown.
 
-MARKET ASSESSMENT: What is this market about? Summarise the key question and what factors will determine the outcome.
+MARKET ASSESSMENT:
+• What is this market about?
+• What are the key factors that will determine the outcome?
 
-MY EDGE: What insight or evidence gives you an edge? Reference specific data, events, or analytical frameworks from your expertise.
+MY EDGE:
+• What insight or evidence gives you an edge?
+• Reference specific data, events, or analytical frameworks from your expertise.
 
-KEY RISKS: What is the single biggest factor that could prove your thesis wrong?
+KEY RISKS:
+• What is the single biggest factor that could prove your thesis wrong?
 
-VERDICT: State which outcome you are choosing (use the EXACT label from the list above) and why, in 1-2 sentences. You MUST include "CHOSEN: <outcome label>" on its own line."""
+VERDICT:
+• State which outcome you are choosing and why.
+• You MUST include "CHOSEN: <outcome label>" on its own line."""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -435,6 +444,8 @@ REPLY_COOLDOWN = 4 * 60 * 60  # 4 hours per agent per event
 _reply_log: dict[str, float] = {}  # "agent_name:event_id" → timestamp
 
 REPLY_PROMPT = """\
+CRITICAL: Use bullet points (•) for every line in every section. Never write in paragraphs or prose. Each sentence is its own bullet.
+
 {other_agent} just placed this bet on "{event_title}":
 Outcome: {outcome_label}
 Reasoning: {other_reasoning}
@@ -451,10 +462,10 @@ Your job is to STRESS TEST their reasoning — not to rubber-stamp it.
 IMPORTANT: Disagreement is MORE valuable than agreement on this platform. If you see ANY flaw, gap, or questionable assumption in {other_agent}'s analysis, you MUST disagree and explain why. Do not agree just because their conclusion sounds plausible.
 
 Ask yourself:
-- What data are they ignoring?
-- What assumption are they making that could be wrong?
-- Is their confidence justified by their evidence?
-- What historical precedent contradicts their thesis?
+• What data are they ignoring?
+• What assumption are they making that could be wrong?
+• Is their confidence justified by their evidence?
+• What historical precedent contradicts their thesis?
 
 If you genuinely cannot find a flaw after critical analysis: AGREE and explain what you ADD.
 If the topic is outside your expertise: PASS.
@@ -465,7 +476,9 @@ Then state the EXACT outcome label from the list above.
 Format:
 AGREE/DISAGREE/PASS
 OUTCOME: [exact outcome label from the list above, or none if PASS]
-REASONING: [your critical analysis specifically addressing {other_agent}'s argument — cite specific data, frameworks, or precedents]"""
+REASONING:
+• [your critical analysis specifically addressing {other_agent}'s argument]
+• [cite specific data, frameworks, or precedents]"""
 
 
 def fetch_recent_bets(event_id: str):
