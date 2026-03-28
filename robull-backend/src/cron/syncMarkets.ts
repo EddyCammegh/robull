@@ -29,10 +29,40 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
     // API fetch succeeded — clear circuit breaker
     await recordApiSuccess(redis);
 
+    // Build a set of polymarket_ids that are already child markets of events.
+    // These must NOT be created as standalone binary markets.
+    const { rows: childRows } = await db.query(
+      `SELECT polymarket_id FROM markets WHERE event_id IS NOT NULL`
+    );
+    const childPolyIds = new Set(childRows.map((r: { polymarket_id: string }) => r.polymarket_id));
+
     let inserted = 0;
+    let skippedChildren = 0;
     const fetchedIds = new Set<string>();
     for (const m of markets) {
       fetchedIds.add(m.polymarket_id);
+
+      // Skip if this market already exists as a child of a multi-outcome event
+      if (childPolyIds.has(m.polymarket_id)) {
+        skippedChildren++;
+        continue;
+      }
+
+      // Also skip if this market's question closely matches an existing event title
+      // (catches cases where the polymarket_id differs but the market is clearly
+      // a duplicate of an event outcome)
+      const questionPrefix = m.question.slice(0, 60).replace(/'/g, "''");
+      if (questionPrefix.length >= 60) {
+        const { rows: titleMatch } = await db.query(
+          `SELECT 1 FROM events WHERE LOWER(title) LIKE LOWER($1) LIMIT 1`,
+          [`%${questionPrefix}%`]
+        );
+        if (titleMatch.length > 0) {
+          skippedChildren++;
+          continue;
+        }
+      }
+
       const { rows: upserted } = await db.query(
         `INSERT INTO markets
            (polymarket_id, question, category, slug, polymarket_url, volume,
@@ -68,7 +98,7 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       if (upserted[0]?.is_new) inserted++;
     }
 
-    console.log(`[cron] Synced ${synced} markets from API (${inserted} new, ${synced - inserted} updated).`);
+    console.log(`[cron] Synced ${synced} markets from API (${inserted} new, ${synced - inserted} updated, ${skippedChildren} skipped as event children).`);
 
     // ── Sync multi-outcome events ─────────────────────────────────────────
     const events = await fetchPolymarketEvents();
@@ -202,6 +232,19 @@ export async function syncMarkets(db: Pool, redis: Redis): Promise<void> {
       `SELECT COUNT(event_id)::int AS with_eid, (COUNT(*) - COUNT(event_id))::int AS without_eid FROM markets`
     );
     console.log(`[cron] Markets: ${eidCounts.with_eid} with event_id, ${eidCounts.without_eid} standalone.`);
+
+    // ── Cleanup: resolve standalone duplicates of event child markets ────
+    // If a polymarket_id exists as BOTH a standalone (event_id IS NULL) and
+    // a child (event_id IS NOT NULL), resolve the standalone version.
+    const { rowCount: dupesCleaned } = await db.query(
+      `UPDATE markets SET resolved = true, updated_at = NOW()
+       WHERE event_id IS NULL AND polymarket_id IN (
+         SELECT polymarket_id FROM markets WHERE event_id IS NOT NULL
+       )`
+    );
+    if (dupesCleaned && dupesCleaned > 0) {
+      console.log(`[cron] Dedup: resolved ${dupesCleaned} standalone markets that are also event children.`);
+    }
 
     // Reclassify ALL markets in DB using the latest classification rules
     const { rows } = await db.query('SELECT id, question, category FROM markets');

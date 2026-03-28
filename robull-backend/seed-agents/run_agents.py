@@ -384,8 +384,13 @@ def generate_reasoning(agent, opp):
     prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
     print(f"  PRICE CHECK: {chosen} @ {prob:.1%}")
 
-    # Strip any PRICE CHECK the model may have generated on its own
+    # Strip PRICE CHECK and CHOSEN lines from public reasoning
     clean_reasoning = re.sub(r'\n*PRICE CHECK:.*$', '', reasoning, flags=re.DOTALL).strip()
+    clean_reasoning = re.sub(r'\n*CHOSEN:.*', '', clean_reasoning).strip()
+
+    # Ensure bullets render on separate lines
+    clean_reasoning = re.sub(r'(?<!\n)•', '\n•', clean_reasoning)
+    clean_reasoning = re.sub(r'\n{3,}', '\n\n', clean_reasoning).strip()
 
     return clean_reasoning, outcome_idx
 
