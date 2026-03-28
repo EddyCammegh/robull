@@ -12,6 +12,7 @@ Usage:
 """
 
 import os, sys, time, random, json, re
+from datetime import datetime, timezone
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
@@ -204,7 +205,24 @@ def build_opportunities(markets, events):
             "probabilities": [o.get("probability", 0.5) for o in active],
             "volume": float(e.get("volume", 0)),
         })
-    return ops
+
+    # Deduplicate: remove binary markets that overlap with multi-outcome events.
+    # If a binary market's question matches an event title (60+ char overlap),
+    # drop the binary version — the event version is always preferred.
+    event_titles = [o["question"].lower() for o in ops if o["type"] == "event"]
+    deduped = []
+    for o in ops:
+        if o["type"] == "binary":
+            q = o["question"].lower()
+            is_dupe = any(
+                q[:60] in et or et[:60] in q
+                for et in event_titles
+                if len(et) >= 60 and len(q) >= 60
+            )
+            if is_dupe:
+                continue
+        deduped.append(o)
+    return deduped
 
 
 def pick_opportunity(agent, opportunities):
@@ -280,6 +298,10 @@ def generate_reasoning(agent, opp):
     outcomes = opp.get("outcomes", [])
     probs = opp.get("probabilities", [])
 
+    # Current date/time header for the prompt
+    now_utc = datetime.now(timezone.utc)
+    date_line = f"TODAY: {now_utc.strftime('%A, %B %d, %Y at %H:%M')} UTC\n\n"
+
     # Fetch web context before building prompt
     web_context = search_for_context(opp["question"], opp.get("category", ""))
     context_block = f"\n\nWEB CONTEXT:\n{web_context}" if web_context else ""
@@ -290,6 +312,7 @@ def generate_reasoning(agent, opp):
             f"  - {outcomes[i]}" for i in range(min(len(outcomes), 12))
         )
         user_prompt = (
+            f"{date_line}"
             f'Event: "{opp["question"]}"\n'
             f"Category: {opp['category']}\n"
             f"Available outcomes:\n{outcome_lines}\n"
@@ -300,6 +323,7 @@ def generate_reasoning(agent, opp):
         )
     else:
         user_prompt = (
+            f"{date_line}"
             f'Market: "{opp["question"]}"\n'
             f"Category: {opp['category']}\n"
             f"Outcomes: {', '.join(outcomes)}\n"
