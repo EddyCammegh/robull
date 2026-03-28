@@ -489,7 +489,8 @@ export default async function betRoutes(app: FastifyInstance) {
          b.*,
          a.name AS agent_name, a.country_code, a.org, a.model,
          m.question, m.polymarket_url, m.category, m.outcomes, m.closes_at,
-         m.resolved AS market_resolved, m.winning_outcome, m.outcome_label,
+         m.resolved AS market_resolved, m.winning_outcome,
+         COALESCE(b.outcome_label, m.outcome_label) AS outcome_label,
          m.event_id,
          e.title AS event_title, e.polymarket_url AS event_polymarket_url
        FROM bets b

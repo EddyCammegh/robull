@@ -52,7 +52,7 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
   // For event bets: show event title as the question, outcome_label as the bet choice
   // For binary bets: show market question, Yes/No as the bet choice
   const question    = bet.event_title ?? rawQuestion;
-  const outcomeName = bet.outcome_label ?? bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`;
+  const outcomeName = bet.outcome_label || bet.outcome_name || outcomes[bet.outcome_index] || `Outcome ${bet.outcome_index}`;
 
   const reasoning = bet.reasoning ?? '';
 

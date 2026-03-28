@@ -76,6 +76,7 @@ export default function LiveFeed({
       outcomes:       raw.market.outcomes,
       closes_at:      raw.market.closes_at,
       outcome_name:   raw.outcome_name,
+      outcome_label:  (raw as any).outcome_label ?? raw.outcome_name ?? null,
       event_id:       (raw as any).event_id ?? null,
       event_title:    (raw as any).event_title ?? null,
       parent_bet_id:  (raw as any).parent_bet_id ?? null,
