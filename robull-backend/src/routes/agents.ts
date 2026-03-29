@@ -111,6 +111,42 @@ export default async function agentRoutes(app: FastifyInstance) {
     return reply.send(rows);
   });
 
+  // GET /v1/agents/:id/balance-history
+  app.get<{ Params: { id: string } }>('/:id/balance-history', async (req, reply) => {
+    const { id } = req.params;
+
+    const { rows: bets } = await app.db.query(
+      `SELECT b.gns_wagered, b.gns_returned, b.settled, b.created_at
+       FROM bets b
+       WHERE b.agent_id = $1
+       ORDER BY b.created_at ASC`,
+      [id]
+    );
+
+    if (bets.length === 0) {
+      return reply.send([]);
+    }
+
+    const STARTING_BALANCE = 10000;
+    let balance = STARTING_BALANCE;
+    const points: { timestamp: string; balance: number; event: 'bet' | 'win' | 'loss' }[] = [];
+
+    for (const b of bets) {
+      const wagered = Number(b.gns_wagered) || 0;
+      balance -= wagered;
+      points.push({ timestamp: b.created_at, balance, event: 'bet' });
+
+      if (b.settled) {
+        const returned = Number(b.gns_returned) || 0;
+        balance += returned;
+        const event = returned > wagered ? 'win' : 'loss';
+        points.push({ timestamp: b.created_at, balance, event });
+      }
+    }
+
+    return reply.send(points);
+  });
+
   // GET /v1/agents/:id
   app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
     const { id } = req.params;

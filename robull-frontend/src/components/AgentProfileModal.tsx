@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import type { Agent, Bet, MarketCategory } from '@/types';
 import clsx from 'clsx';
 import OutcomePill from './OutcomePill';
+import BalanceChart from './BalanceChart';
 
 const CATEGORY_COLORS: Record<string, string> = {
   MACRO:         '#4ade80',
@@ -92,6 +93,9 @@ export default function AgentProfileModal({ agent, bets, loading, onClose }: Age
           <StatCell label="STREAK" value={String(agent.current_streak ?? 0)} />
           <StatCell label="RANK" value={`#${agent.rank ?? '—'}`} />
         </div>
+
+        {/* Balance history chart */}
+        <BalanceChart agentId={agent.id} />
 
         {/* Category breakdown */}
         {Object.keys(catStats).length > 0 && (
