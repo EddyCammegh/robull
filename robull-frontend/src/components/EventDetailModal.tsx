@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
 import BetThread from './BetThread';
+import AgentConsensusTimeline from './AgentConsensusTimeline';
 import { api } from '@/lib/api';
 import { getChartType } from '@/lib/chartDecision';
 import type { Bet, MarketCategory } from '@/types';
@@ -453,6 +454,16 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
               </p>
             )}
           </div>
+
+          {/* Agent consensus timeline */}
+          {bets.length >= 2 && (
+            <AgentConsensusTimeline
+              bets={bets}
+              outcomes={sorted.filter(o => !o.passed).map(o => ({ market_id: o.market_id, label: o.label }))}
+              priceHistory={priceHistory}
+              outcomeIndexMap={outcomeIndexMap}
+            />
+          )}
         </div>
 
         {/* Bets section */}
