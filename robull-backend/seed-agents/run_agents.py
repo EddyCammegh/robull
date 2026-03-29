@@ -98,6 +98,8 @@ VERDICT:
 CHOSEN: [exact outcome label]
 CONFIDENCE: [number 1-99]%
 
+If no outcome is valid based on your analysis, write CHOSEN: PASS and explain why in your VERDICT.
+
 Rules:
 • No prose whatsoever
 • Each bullet is one standalone fact or argument, maximum 20 words
@@ -268,20 +270,31 @@ def pick_outcome(agent, opp):
     return 0
 
 
+_PASS_KEYWORDS = {"pass", "none", "abstain"}
+_PASS_PHRASES = ("none of the above", "no valid", "malformed", "cannot bet")
+
+
 def _parse_chosen_outcome(reasoning: str, outcomes: list[str]) -> Optional[str]:
-    """Extract the agent's chosen outcome from its reasoning text."""
+    """Extract the agent's chosen outcome from its reasoning text.
+
+    Returns the matched outcome label, or None if the agent passed / no match found.
+    """
     # Look for explicit "CHOSEN: <label>" line
     for line in reasoning.splitlines():
         stripped = line.strip().upper()
         if stripped.startswith("CHOSEN:"):
             chosen_text = line.split(":", 1)[1].strip()
+            chosen_lower = chosen_text.lower()
+            # Check for explicit pass / abstain
+            if chosen_lower in _PASS_KEYWORDS or any(p in chosen_lower for p in _PASS_PHRASES):
+                return None
             # Match against available outcomes (case-insensitive)
             for o in outcomes:
-                if o.lower() == chosen_text.lower():
+                if o.lower() == chosen_lower:
                     return o
             # Fuzzy: check if outcome label appears in the chosen text
             for o in outcomes:
-                if o.lower() in chosen_text.lower():
+                if o.lower() in chosen_lower:
                     return o
     # Fallback: scan VERDICT section for any outcome label
     in_verdict = False
@@ -390,14 +403,13 @@ def generate_reasoning(agent, opp):
     if chosen:
         outcome_idx = outcomes.index(chosen)
     else:
-        # Agent didn't clearly state a choice — fall back to random
-        outcome_idx = random.randrange(len(outcomes))
-        chosen = outcomes[outcome_idx]
-        print(f"  [!] Could not parse outcome from reasoning, falling back to '{chosen}'")
+        # Agent passed or didn't clearly state a choice — signal with -1
+        outcome_idx = -1
 
     # Stage 2: Log price check internally but don't include in public reasoning
-    prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
-    print(f"  PRICE CHECK: {chosen} @ {prob:.1%}")
+    if outcome_idx >= 0:
+        prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
+        print(f"  PRICE CHECK: {chosen} @ {prob:.1%}")
 
     # Strip PRICE CHECK, CHOSEN, and CONFIDENCE lines from public reasoning
     clean_reasoning = re.sub(r'\n*PRICE CHECK:.*$', '', reasoning, flags=re.DOTALL).strip()
@@ -414,6 +426,23 @@ def generate_reasoning(agent, opp):
 
 
 def place_bet(agent, opp, outcome_idx, reasoning):
+    # Agent passed — no valid outcome
+    if outcome_idx < 0:
+        # Extract VERDICT section for the log
+        verdict_lines = []
+        in_verdict = False
+        for line in reasoning.splitlines():
+            if line.strip().upper().startswith("VERDICT"):
+                in_verdict = True
+                continue
+            elif in_verdict and line.strip().upper().startswith(("CHOSEN", "CONFIDENCE", "STRENGTHS", "RISKS")):
+                break
+            if in_verdict and line.strip():
+                verdict_lines.append(line.strip())
+        verdict_text = " | ".join(verdict_lines) if verdict_lines else "(no verdict)"
+        print(f"  [{agent['name']}] PASS: {verdict_text}")
+        return "pass"
+
     balance = get_balance(agent["name"])
     max_allowed = max(50, balance * 0.05)  # mirrors backend: BASE_MAX_BET * (balance / 10000)
     ceil = min(agent["max_wager"], int(max_allowed))
@@ -756,7 +785,10 @@ def run_cycle(opportunities):
 
         reasoning, outcome_idx = generate_reasoning(agent, opp)
         result = place_bet(agent, opp, outcome_idx, reasoning)
-        if result is not None:
+        if result == "pass":
+            # Agent deliberately passed — still put on cooldown to avoid retrying
+            _record_bet(name)
+        elif result is not None:
             _record_bet(name)
 
 
