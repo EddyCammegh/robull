@@ -111,6 +111,7 @@ Rules:
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 _balance_cache: dict[str, float] = {}
+_history_cache: dict[str, list] = {}  # agent name → agent_history from last fetch
 
 
 def search_for_context(question: str, category: str) -> str:
@@ -163,10 +164,19 @@ def fetch_markets():
     return resp.json()
 
 
-def fetch_events():
-    resp = requests.get(f"{API}/v1/events", params={"blind": "true"}, timeout=15)
+def fetch_events(api_key: str | None = None):
+    """Fetch events. If api_key is provided, authenticates to receive agent_history."""
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    resp = requests.get(f"{API}/v1/events", params={"blind": "true"}, headers=headers, timeout=15)
     resp.raise_for_status()
-    return resp.json()
+    data = resp.json()
+    # Authenticated response: { events: [...], agent_history: [...] }
+    if isinstance(data, dict) and "events" in data:
+        return data["events"], data.get("agent_history", [])
+    # Unauthenticated response: plain array
+    return data, []
 
 
 def fetch_balances():
@@ -321,7 +331,21 @@ def _parse_confidence(reasoning: str) -> int:
     return 60
 
 
-def generate_reasoning(agent, opp):
+def _format_history_block(agent_history: list) -> str:
+    """Format agent's recent bet history into a prompt block."""
+    if not agent_history:
+        return ""
+    lines = ["YOUR RECENT TRACK RECORD:"]
+    for entry in agent_history[:5]:
+        result = (entry.get("result") or "pending").upper()
+        title = (entry.get("title") or "Unknown market")[:60]
+        outcome = entry.get("outcome_label") or "?"
+        conf = entry.get("confidence", "?")
+        lines.append(f'- [{result}] "{title}" \u2192 chose "{outcome}" at confidence {conf}%')
+    return "\n".join(lines) + "\n\n"
+
+
+def generate_reasoning(agent, opp, agent_history: list | None = None):
     """Generate reasoning and return (reasoning_text, chosen_outcome_index)."""
     outcomes = opp.get("outcomes", [])
     probs = opp.get("probabilities", [])
@@ -329,6 +353,9 @@ def generate_reasoning(agent, opp):
     # Current date/time header for the prompt
     now_utc = datetime.now(timezone.utc)
     date_line = f"TODAY: {now_utc.strftime('%A, %B %d, %Y at %H:%M')} UTC\n\n"
+
+    # Agent track record block
+    history_block = _format_history_block(agent_history or [])
 
     # Fetch web context before building prompt
     web_context = search_for_context(opp["question"], opp.get("category", ""))
@@ -341,6 +368,7 @@ def generate_reasoning(agent, opp):
         )
         user_prompt = (
             f"{date_line}"
+            f"{history_block}"
             f'Event: "{opp["question"]}"\n'
             f"Category: {opp['category']}\n"
             f"Available outcomes:\n{outcome_lines}\n"
@@ -352,6 +380,7 @@ def generate_reasoning(agent, opp):
     else:
         user_prompt = (
             f"{date_line}"
+            f"{history_block}"
             f'Market: "{opp["question"]}"\n'
             f"Category: {opp['category']}\n"
             f"Outcomes: {', '.join(outcomes)}\n"
@@ -783,7 +812,9 @@ def run_cycle(opportunities):
         if not opp:
             continue
 
-        reasoning, outcome_idx = generate_reasoning(agent, opp)
+        # Use cached history for this agent (populated in main loop)
+        agent_history = _history_cache.get(name, [])
+        reasoning, outcome_idx = generate_reasoning(agent, opp, agent_history)
         result = place_bet(agent, opp, outcome_idx, reasoning)
         if result == "pass":
             # Agent deliberately passed — still put on cooldown to avoid retrying
@@ -811,7 +842,20 @@ def main():
         try:
             fetch_balances()
             markets = fetch_markets()
-            events = fetch_events()
+            events, _ = fetch_events()  # unauthenticated — shared event list
+            _history_cache.clear()  # reset per-cycle cache
+
+            # Pre-fetch history for agents likely to bet this cycle
+            candidates = [a for a in AGENTS if not _is_on_cooldown(a["name"]) and get_balance(a["name"]) >= MIN_BALANCE]
+            for agent in candidates[:6]:  # cap to avoid too many API calls
+                name = agent["name"]
+                if name not in _history_cache:
+                    try:
+                        _, hist = fetch_events(api_key=agent["key"])
+                        _history_cache[name] = hist
+                    except Exception:
+                        _history_cache[name] = []
+
             opportunities = build_opportunities(markets, events)
             print(f"  {len(markets)} markets + {len(events)} events = {len(opportunities)} opportunities")
             if opportunities:

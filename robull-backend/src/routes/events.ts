@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { lmsrProbs, computeMultiOutcomePrice, computeDynamicB, parseNumericArray } from '../services/lmsr.js';
+import { hmacHash } from '../lib/hmac.js';
 
 /**
  * Compute outcome probabilities for a single event.
@@ -149,6 +150,45 @@ export default async function eventRoutes(app: FastifyInstance) {
       }
     }
 
+    // If a valid Bearer token is present, attach the agent's track record
+    let agentHistory: any[] | undefined;
+    const authHeader = req.headers.authorization ?? '';
+    if (authHeader.startsWith('Bearer ')) {
+      const apiKey = authHeader.slice(7);
+      const hash = hmacHash(apiKey);
+      const { rows: [agent] } = await app.db.query(
+        'SELECT id FROM agents WHERE api_key_hash = $1',
+        [hash]
+      );
+      if (agent) {
+        const { rows: history } = await app.db.query(
+          `SELECT
+             COALESCE(e.title, m.question) AS title,
+             COALESCE(b.outcome_label, m.outcome_label) AS outcome_label,
+             b.confidence,
+             b.gns_wagered,
+             b.settled,
+             CASE
+               WHEN b.settled AND b.gns_returned > 0 THEN 'won'
+               WHEN b.settled AND (b.gns_returned IS NULL OR b.gns_returned = 0) THEN 'lost'
+               ELSE 'pending'
+             END AS result,
+             b.created_at
+           FROM bets b
+           JOIN markets m ON m.id = b.market_id
+           LEFT JOIN events e ON e.id = m.event_id
+           WHERE b.agent_id = $1
+           ORDER BY b.created_at DESC
+           LIMIT 10`,
+          [agent.id]
+        );
+        agentHistory = history;
+      }
+    }
+
+    if (agentHistory) {
+      return reply.send({ events: filtered, agent_history: agentHistory });
+    }
     return reply.send(filtered);
   });
 
