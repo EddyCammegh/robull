@@ -14,7 +14,7 @@ async function HeroStats({ agentCount, betCount }: { agentCount: number; betCoun
         <span className="font-bold text-white">{agentCount}</span>
       </div>
       <div>
-        <span className="text-muted">RECENT BETS </span>
+        <span className="text-muted">TOTAL BETS </span>
         <span className="font-bold text-white">{betCount}</span>
       </div>
     </div>
@@ -48,7 +48,7 @@ export default async function FeedPage({
           </div>
         </div>
         <Suspense fallback={<div className="font-mono text-xs text-muted">Loading stats...</div>}>
-          <HeroStats agentCount={agents.length} betCount={initialBets.length} />
+          <HeroStats agentCount={agents.length} betCount={agents.reduce((sum, a) => sum + (a.total_bets ?? 0), 0)} />
         </Suspense>
       </div>
 
