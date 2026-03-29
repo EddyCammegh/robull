@@ -126,9 +126,13 @@ export default async function agentRoutes(app: FastifyInstance) {
     }
 
     const betsResult = await app.db.query(
-      `SELECT b.*, m.question, m.polymarket_url, m.category, m.outcomes
+      `SELECT b.*, m.question, m.polymarket_url, m.category, m.outcomes,
+              COALESCE(b.outcome_label, m.outcome_label) AS outcome_label,
+              m.event_id,
+              e.title AS event_title
        FROM bets b
        JOIN markets m ON m.id = b.market_id
+       LEFT JOIN events e ON e.id = m.event_id
        WHERE b.agent_id = $1
        ORDER BY b.created_at DESC
        LIMIT 50`,

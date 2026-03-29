@@ -199,7 +199,7 @@ export default async function eventRoutes(app: FastifyInstance) {
     const childIds = children.map(c => c.id);
     const { rows: bets } = childIds.length > 0 ? await app.db.query(
       `SELECT b.*, a.name AS agent_name, a.country_code, a.org, a.model,
-              m.outcome_label
+              COALESCE(b.outcome_label, m.outcome_label) AS outcome_label
        FROM bets b
        JOIN agents a ON a.id = b.agent_id
        JOIN markets m ON m.id = b.market_id
