@@ -96,12 +96,14 @@ VERDICT:
 • [one or two bullets maximum with the final call]
 
 CHOSEN: [exact outcome label]
+CONFIDENCE: [number 1-99]%
 
 Rules:
 • No prose whatsoever
 • Each bullet is one standalone fact or argument, maximum 20 words
 • Each section has 2-4 bullets maximum
 • CHOSEN must be on its own line at the very end
+• CONFIDENCE is your probability estimate (1-99%) for the chosen outcome, independent of market price
 • Every bullet must be on its own line"""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -295,6 +297,17 @@ def _parse_chosen_outcome(reasoning: str, outcomes: list[str]) -> Optional[str]:
     return None
 
 
+_CONFIDENCE_RE = re.compile(r'CONFIDENCE:\s*(\d{1,3})%', re.IGNORECASE)
+
+
+def _parse_confidence(reasoning: str) -> int:
+    """Extract the agent's self-reported confidence from its reasoning text."""
+    m = _CONFIDENCE_RE.search(reasoning)
+    if m:
+        return max(1, min(99, int(m.group(1))))
+    return 60
+
+
 def generate_reasoning(agent, opp):
     """Generate reasoning and return (reasoning_text, chosen_outcome_index)."""
     outcomes = opp.get("outcomes", [])
@@ -386,9 +399,10 @@ def generate_reasoning(agent, opp):
     prob = probs[outcome_idx] if outcome_idx < len(probs) else 0.5
     print(f"  PRICE CHECK: {chosen} @ {prob:.1%}")
 
-    # Strip PRICE CHECK and CHOSEN lines from public reasoning
+    # Strip PRICE CHECK, CHOSEN, and CONFIDENCE lines from public reasoning
     clean_reasoning = re.sub(r'\n*PRICE CHECK:.*$', '', reasoning, flags=re.DOTALL).strip()
     clean_reasoning = re.sub(r'\n*CHOSEN:.*', '', clean_reasoning).strip()
+    clean_reasoning = re.sub(r'\n*CONFIDENCE:.*', '', clean_reasoning).strip()
 
     # Ensure every • bullet is on its own line
     clean_reasoning = re.sub(r'(?<!\n)•', '\n•', clean_reasoning)
@@ -407,9 +421,7 @@ def place_bet(agent, opp, outcome_idx, reasoning):
     wager = random.randint(floor, ceil)
     wager = max(100, (wager // 50) * 50)
 
-    probs = opp.get("probabilities") or []
-    prob = probs[outcome_idx] if outcome_idx < len(probs) else None
-    confidence = max(30, min(95, int(prob * 100) + random.randint(-10, 15))) if prob is not None else random.randint(45, 80)
+    confidence = _parse_confidence(reasoning)
 
     min_conf = agent.get("min_confidence", 0)
     if confidence < min_conf:
@@ -509,12 +521,14 @@ VERDICT:
 • [one or two bullets maximum with the final call]
 
 CHOSEN: [exact outcome label]
+CONFIDENCE: [number 1-99]%
 
 Rules:
 • No prose whatsoever
 • Each bullet is one standalone fact or argument, maximum 20 words
 • Each section has 2-4 bullets maximum
 • CHOSEN must be on its own line at the very end
+• CONFIDENCE is your probability estimate (1-99%) for the chosen outcome, independent of market price
 • Every bullet must be on its own line"""
 
 
@@ -686,7 +700,7 @@ def run_reply_cycle(events):
             # Place the reply bet
             wager = random.randint(agent['min_wager'], agent['max_wager'])
             wager = max(100, (wager // 50) * 50)
-            confidence = random.randint(55, 85)
+            confidence = _parse_confidence(reasoning)
 
             payload = {
                 "event_id": event_id,
