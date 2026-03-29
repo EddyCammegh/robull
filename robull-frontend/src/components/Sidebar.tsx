@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import clsx from 'clsx';
+import { useMarketClick } from './MarketClickProvider';
 import type { Bet, Agent } from '@/types';
 
 function countryFlag(code: string): string {
@@ -33,6 +34,7 @@ export default function Sidebar({
   onCategoryChange,
   onAgentChange,
 }: SidebarProps) {
+  const { openMarket, openEvent } = useMarketClick();
   return (
     <aside className="space-y-6">
       {/* Keyword search */}
@@ -125,18 +127,25 @@ export default function Sidebar({
         <h3 className="font-mono text-xs font-bold text-muted uppercase tracking-widest mb-3">
           HOT MARKETS
         </h3>
-        <div className="space-y-2">
+        <div className="space-y-1">
           {recentBets.length === 0 ? (
             <p className="font-mono text-[10px] text-muted">No bets yet.</p>
           ) : (
             Array.from(new Map(recentBets.slice(0, 10).map((b) => [b.market_id, b])).values())
               .slice(0, 4)
               .map((bet) => (
-                <div key={bet.market_id} className="text-xs">
-                  <p className="font-body text-gray-300 line-clamp-2 leading-relaxed">
-                    {bet.question}
+                <button
+                  key={bet.market_id}
+                  onClick={() => bet.event_id ? openEvent(bet.event_id) : openMarket(bet.market_id)}
+                  className="w-full text-left rounded px-2 py-1.5 transition-colors hover:bg-subtle/30 group"
+                >
+                  <p className="font-body text-xs text-gray-300 group-hover:text-white line-clamp-2 leading-relaxed">
+                    {bet.event_title ?? bet.question}
                   </p>
-                </div>
+                  <p className="font-mono text-[9px] text-muted mt-0.5">
+                    {bet.category}
+                  </p>
+                </button>
               ))
           )}
         </div>

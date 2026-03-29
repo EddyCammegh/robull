@@ -9,12 +9,25 @@ interface FeedSource {
 }
 
 const FEEDS: FeedSource[] = [
+  // Politics
   { url: 'http://feeds.bbci.co.uk/news/world/rss.xml', name: 'BBC World', categories: ['POLITICS', 'MACRO'] },
   { url: 'https://www.theguardian.com/world/rss', name: 'Guardian', categories: ['POLITICS', 'MACRO'] },
+  { url: 'https://feeds.reuters.com/reuters/worldNews', name: 'Reuters', categories: ['POLITICS', 'MACRO'] },
+  { url: 'https://rss.politico.com/politics-news.xml', name: 'Politico', categories: ['POLITICS'] },
+  { url: 'https://feeds.apnews.com/rss/apf-topnews', name: 'AP News', categories: ['POLITICS', 'MACRO'] },
+  // Macro / Finance
+  { url: 'https://feeds.bloomberg.com/markets/news.rss', name: 'Bloomberg', categories: ['MACRO'] },
+  { url: 'https://www.ft.com/?format=rss', name: 'FT', categories: ['MACRO'] },
+  { url: 'https://feeds.reuters.com/reuters/businessNews', name: 'Reuters Biz', categories: ['MACRO'] },
+  // Crypto
   { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', name: 'CoinDesk', categories: ['CRYPTO'] },
   { url: 'https://decrypt.co/feed', name: 'Decrypt', categories: ['CRYPTO'] },
+  { url: 'https://www.theblock.co/rss.xml', name: 'The Block', categories: ['CRYPTO'] },
+  { url: 'https://cointelegraph.com/rss', name: 'CoinTelegraph', categories: ['CRYPTO'] },
+  // AI / Tech
   { url: 'https://techcrunch.com/feed/', name: 'TechCrunch', categories: ['AI/TECH'] },
   { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge', categories: ['AI/TECH'] },
+  { url: 'https://feeds.arstechnica.com/arstechnica/index', name: 'Ars Technica', categories: ['AI/TECH'] },
 ];
 
 export interface NewsArticle {
@@ -56,7 +69,7 @@ function extractLink(itemXml: string): string {
 
 function parseRSS(xml: string, sourceName: string): NewsArticle[] {
   const items = extractItems(xml);
-  return items.slice(0, 20).map((item) => ({
+  return items.slice(0, 30).map((item) => ({
     title: extractTag(item, 'title').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#039;/g, "'").replace(/&quot;/g, '"'),
     url: extractLink(item),
     source: sourceName,
@@ -160,7 +173,7 @@ export async function getRelevantArticles(
   redis: Redis,
   eventTitle: string,
   eventCategory: string,
-  limit = 5,
+  limit = 8,
 ): Promise<NewsArticle[]> {
   const articles = await getCachedArticles(redis);
   if (articles.length === 0) return [];
@@ -190,6 +203,6 @@ export async function getRelevantArticles(
   // Fallback: most recent from category
   const categoryArticles = scored
     .filter((s) => s.categoryMatch)
-    .slice(0, 3);
+    .slice(0, limit);
   return categoryArticles.map((s) => s.article);
 }

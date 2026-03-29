@@ -17,35 +17,46 @@ interface Article {
 
 const CATEGORIES = ['ALL', 'POLITICS', 'MACRO', 'CRYPTO', 'AI/TECH'];
 
-// Map source names to categories for filtering
 const SOURCE_CATEGORIES: Record<string, string[]> = {
-  'BBC World': ['POLITICS', 'MACRO'],
-  'Guardian': ['POLITICS', 'MACRO'],
-  'CoinDesk': ['CRYPTO'],
-  'Decrypt': ['CRYPTO'],
-  'TechCrunch': ['AI/TECH'],
-  'The Verge': ['AI/TECH'],
+  'BBC World':     ['POLITICS', 'MACRO'],
+  'Guardian':      ['POLITICS', 'MACRO'],
+  'Reuters':       ['POLITICS', 'MACRO'],
+  'Politico':      ['POLITICS'],
+  'AP News':       ['POLITICS', 'MACRO'],
+  'Bloomberg':     ['MACRO'],
+  'FT':            ['MACRO'],
+  'Reuters Biz':   ['MACRO'],
+  'CoinDesk':      ['CRYPTO'],
+  'Decrypt':       ['CRYPTO'],
+  'The Block':     ['CRYPTO'],
+  'CoinTelegraph': ['CRYPTO'],
+  'TechCrunch':    ['AI/TECH'],
+  'The Verge':     ['AI/TECH'],
+  'Ars Technica':  ['AI/TECH'],
 };
+
+const PAGE_SIZE = 12;
 
 export default function NewsPanel() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [category, setCategory] = useState('');
+  const [showCount, setShowCount] = useState(PAGE_SIZE);
+
+  // Reset visible count when category changes
+  useEffect(() => { setShowCount(PAGE_SIZE); }, [category]);
 
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        // Fetch news for a generic event to get all cached articles
-        const res = await fetch(`${API}/v1/prices`);
-        // Also try a general news fetch — use a known event or fallback
         const newsRes = await fetch(`${API}/v1/events`);
         if (!newsRes.ok) return;
         const events = await newsRes.json();
         if (!events.length) return;
 
-        // Fetch news from first few events to build a diverse feed
+        // Fetch from more events to build a diverse feed
         const allArticles: Article[] = [];
         const seen = new Set<string>();
-        for (const evt of events.slice(0, 5)) {
+        for (const evt of events.slice(0, 10)) {
           try {
             const nRes = await fetch(`${API}/v1/events/${evt.id}/news`);
             if (!nRes.ok) continue;
@@ -59,7 +70,6 @@ export default function NewsPanel() {
           } catch { continue; }
         }
 
-        // Sort by published_at descending
         allArticles.sort((a, b) => {
           try { return new Date(b.published_at).getTime() - new Date(a.published_at).getTime(); }
           catch { return 0; }
@@ -78,6 +88,9 @@ export default function NewsPanel() {
     ? articles.filter((a) => (a.categories ?? []).includes(category))
     : articles;
 
+  const visible = filtered.slice(0, showCount);
+  const hasMore = filtered.length > showCount;
+
   return (
     <div className="card overflow-hidden">
       <div className="px-4 py-3 border-b border-border">
@@ -89,6 +102,7 @@ export default function NewsPanel() {
           {CATEGORIES.map((cat) => {
             const value = cat === 'ALL' ? '' : cat;
             const isActive = category === value;
+            const count = value ? articles.filter(a => (a.categories ?? []).includes(value)).length : articles.length;
             return (
               <button
                 key={cat}
@@ -101,38 +115,51 @@ export default function NewsPanel() {
                 )}
               >
                 {cat}
+                {count > 0 && <span className="ml-1 opacity-50">{count}</span>}
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="max-h-96 overflow-y-auto">
-        {filtered.length === 0 ? (
-          <p className="p-4 font-mono text-xs text-muted text-center">Loading news...</p>
+      <div className="max-h-[32rem] overflow-y-auto">
+        {visible.length === 0 ? (
+          <p className="p-4 font-mono text-xs text-muted text-center">
+            {articles.length === 0 ? 'Loading news...' : 'No articles in this category'}
+          </p>
         ) : (
-          filtered.map((a, i) => (
-            <a
-              key={i}
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-start gap-2 px-4 py-2.5 border-b border-border last:border-0 transition-colors hover:bg-subtle/30 group"
-            >
-              <span className="font-mono text-[9px] text-muted flex-shrink-0 w-16 pt-0.5 uppercase">
-                {a.source}
-              </span>
-              <span className="font-body text-xs text-gray-300 group-hover:text-white leading-snug flex-1 line-clamp-2">
-                {a.title}
-              </span>
-              <span className="font-mono text-[9px] text-muted flex-shrink-0 pt-0.5">
-                {(() => {
-                  try { return formatDistanceToNow(new Date(a.published_at), { addSuffix: false }); }
-                  catch { return ''; }
-                })()}
-              </span>
-            </a>
-          ))
+          <>
+            {visible.map((a, i) => (
+              <a
+                key={i}
+                href={a.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-2 px-4 py-2.5 border-b border-border last:border-0 transition-colors hover:bg-subtle/30 group"
+              >
+                <span className="font-mono text-[9px] text-muted flex-shrink-0 w-16 pt-0.5 uppercase">
+                  {a.source}
+                </span>
+                <span className="font-body text-xs text-gray-300 group-hover:text-white leading-snug flex-1 line-clamp-2">
+                  {a.title}
+                </span>
+                <span className="font-mono text-[9px] text-muted flex-shrink-0 pt-0.5">
+                  {(() => {
+                    try { return formatDistanceToNow(new Date(a.published_at), { addSuffix: false }); }
+                    catch { return ''; }
+                  })()}
+                </span>
+              </a>
+            ))}
+            {hasMore && (
+              <button
+                onClick={() => setShowCount(prev => prev + PAGE_SIZE)}
+                className="w-full py-2.5 font-mono text-[10px] text-accent hover:text-white transition-colors border-t border-border"
+              >
+                Show more ({filtered.length - showCount} remaining)
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
