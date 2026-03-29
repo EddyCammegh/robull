@@ -102,7 +102,7 @@ export default async function betRoutes(app: FastifyInstance) {
       const errors: Record<string, string> = {
         resolved:     'Market has resolved — betting is closed.',
         ended:        'Market has ended — the closing time has passed.',
-        closing_soon: 'Market closing soon — betting closed 30 minutes before resolution.',
+        closing_soon: 'Market closing soon — betting closed 10 minutes before resolution.',
       };
       return reply.status(409).send({ error: errors[closedReason] });
     }

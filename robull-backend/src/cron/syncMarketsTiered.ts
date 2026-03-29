@@ -26,7 +26,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function syncTier(db: Pool, redis: Redis, tier: Tier): Promise<void> {
-  // Always enforce the 10-minute close buffer first
+  // Enforce close buffer (10 min before closes_at) before checking tier
   const buffered = await enforceCloseBuffer(redis, db);
   if (buffered > 0) {
     console.log(`[integrity:${tier}] Close buffer resolved ${buffered} markets.`);

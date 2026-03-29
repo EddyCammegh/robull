@@ -78,8 +78,8 @@ print(f"Loaded {len(AGENTS)} agents")
 # ── Config ──────────────────────────────────────────────────────────────────
 
 MIN_BALANCE = 500
-COOLDOWN_MIN = 8 * 60   # 8 minutes
-COOLDOWN_MAX = 12 * 60  # 12 minutes
+COOLDOWN_MIN = 5 * 60   # 5 minutes
+COOLDOWN_MAX = 8 * 60   # 8 minutes
 
 REASONING_FORMAT = """\
 CRITICAL: Every bullet point MUST be on its own separate line. Never put multiple bullets on the same line.
@@ -763,7 +763,7 @@ def run_reply_cycle(events):
 # ── Main loop ──────────────────────────────────────────────────────────────
 
 def run_cycle(opportunities):
-    num_agents = random.choice([1, 1, 2, 2, 3])
+    num_agents = random.choice([2, 2, 3, 3, 4])
     candidates = [a for a in AGENTS if not _is_on_cooldown(a["name"])]
     if not candidates:
         print("  All agents on cooldown.")

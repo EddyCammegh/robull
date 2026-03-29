@@ -9,7 +9,7 @@ const API_LAST_SUCCESS   = 'platform:api_last_success';
 const MARKET_STATUS_TTL  = 60;       // seconds
 const CIRCUIT_BREAKER_TTL = 600;     // auto-expire safety net (10 min)
 const API_OUTAGE_THRESHOLD = 5 * 60; // 5 minutes in seconds
-const CLOSE_BUFFER_MS = 30 * 60 * 1000; // 30 minutes
+const CLOSE_BUFFER_MS = 10 * 60 * 1000; // 10 minutes
 
 // ─── Market status cache ───────────────────────────────────────────────────────
 
@@ -154,7 +154,7 @@ export async function checkEventResolution(db: Pool, eventId: string): Promise<v
   }
 }
 
-// ─── Close buffer: resolve markets within 30 min of closes_at ──────────────────
+// ─── Close buffer: resolve markets within 10 min of closes_at ──────────────────
 
 export async function enforceCloseBuffer(redis: Redis, db: Pool): Promise<number> {
   // Only close-buffer standalone markets. Child markets (event_id IS NOT NULL)
@@ -164,7 +164,7 @@ export async function enforceCloseBuffer(redis: Redis, db: Pool): Promise<number
      WHERE resolved = false
        AND event_id IS NULL
        AND closes_at IS NOT NULL
-       AND closes_at <= NOW() + INTERVAL '30 minutes'
+       AND closes_at <= NOW() + INTERVAL '10 minutes'
      RETURNING id`
   );
 
