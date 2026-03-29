@@ -37,7 +37,13 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
   const probs = market.current_probs ?? market.initial_probs ?? [];
   const category = market.category as MarketCategory;
   const isResolved = market.resolved && market.winning_outcome != null;
-  const winnerLabel = isResolved ? market.outcomes[market.winning_outcome!] : null;
+  const isChildMarket = !!market.event_id;
+  // For child markets of events, outcome_label holds the named outcome (e.g. "March 31")
+  // while market.outcomes is just ["Yes", "No"]
+  const displayLabel = isChildMarket && market.outcome_label ? market.outcome_label : null;
+  const winnerLabel = isResolved
+    ? (displayLabel ?? market.outcomes[market.winning_outcome!])
+    : null;
 
   // Close on Escape
   useEffect(() => {
@@ -112,7 +118,10 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
           {/* LMSR Odds Bar */}
           {probs.length > 0 && (
             <div className="mt-4 space-y-2">
-              {market.outcomes.map((outcome, i) => (
+              {market.outcomes.map((outcome, i) => {
+                // For child markets, show the event outcome label instead of "Yes"/"No"
+                const barLabel = (i === 0 && displayLabel) ? displayLabel : outcome;
+                return (
                 <div key={i} className="flex items-center gap-3">
                   <span className="font-mono text-xs text-white w-16 text-right font-semibold">
                     {((probs[i] ?? 0) * 100).toFixed(1)}%
@@ -124,7 +133,7 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                         width: `${(probs[i] ?? 0) * 100}%`,
                         background: (() => {
                           if (isResolved) return i === market.winning_outcome ? '#22c55e' : '#333333';
-                          const isBinaryYesNo = market.outcomes.length === 2 && market.outcomes[0] === 'Yes' && market.outcomes[1] === 'No';
+                          const isBinaryYesNo = !displayLabel && market.outcomes.length === 2 && market.outcomes[0] === 'Yes' && market.outcomes[1] === 'No';
                           if (isBinaryYesNo) return i === 0 ? '#ff4400' : '#555555';
                           const colours = ['#FF4400', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#6B7280'];
                           return colours[i % colours.length];
@@ -133,13 +142,14 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                     />
                   </div>
                   <span className={clsx(
-                    'font-mono text-sm font-bold w-24',
+                    'font-mono text-sm font-bold w-24 truncate',
                     isResolved && i === market.winning_outcome ? 'text-green-400' : 'text-white'
-                  )}>
-                    {outcome} {isResolved && i === market.winning_outcome && '✓'}
+                  )} title={barLabel}>
+                    {barLabel} {isResolved && i === market.winning_outcome && '✓'}
                   </span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -162,9 +172,7 @@ export default function MarketDetailModal({ market, bets, loading, onClose }: Ma
                 {splitOutcomes.slice(0, 2).map((outcomeIdx) => (
                   <div key={outcomeIdx}>
                     <div className="mb-3 text-center">
-                      <span className="rounded bg-accent/10 border border-accent/30 px-2 py-1 font-mono text-xs font-bold text-accent">
-                        {market.outcomes[outcomeIdx]}
-                      </span>
+                      <OutcomePill label={(outcomeIdx === 0 && displayLabel) ? displayLabel : market.outcomes[outcomeIdx]} />
                     </div>
                     <div className="space-y-2">
                       {betsByOutcome[outcomeIdx].map((bet) => (

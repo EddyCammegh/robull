@@ -126,7 +126,7 @@ export default function MarketRow({ market, liveProbs, badge }: MarketRowProps) 
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {market.resolved && market.winning_outcome != null && (
               <span className="rounded bg-green-500/15 border border-green-500/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-green-400 flex-shrink-0">
-                RESOLVED: {market.outcomes[market.winning_outcome]} ✓
+                RESOLVED: {market.outcome_label ?? market.outcomes[market.winning_outcome]} ✓
               </span>
             )}
             {!market.resolved && isNew && (
@@ -187,7 +187,8 @@ export default function MarketRow({ market, liveProbs, badge }: MarketRowProps) 
 
         {/* Probability bars */}
         {probs.length > 0 && (() => {
-          const isBinaryYesNo = market.outcomes.length === 2
+          const childLabel = market.event_id && market.outcome_label ? market.outcome_label : null;
+          const isBinaryYesNo = !childLabel && market.outcomes.length === 2
             && market.outcomes[0] === 'Yes' && market.outcomes[1] === 'No';
           const MULTI_COLOURS = ['#FF4400', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#6B7280'];
           return isBinaryYesNo ? (
@@ -212,9 +213,11 @@ export default function MarketRow({ market, liveProbs, badge }: MarketRowProps) 
             </div>
           ) : (
             <div className="mt-2 space-y-1">
-              {market.outcomes.map((outcome, i) => (
+              {market.outcomes.map((outcome, i) => {
+                const label = (i === 0 && childLabel) ? childLabel : outcome;
+                return (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-muted w-24 truncate flex-shrink-0">{outcome}</span>
+                  <span className="font-mono text-[10px] text-muted w-24 truncate flex-shrink-0" title={label}>{label}</span>
                   <div className="flex-1 h-1.5 rounded-full bg-subtle overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
@@ -228,7 +231,8 @@ export default function MarketRow({ market, liveProbs, badge }: MarketRowProps) 
                     {((probs[i] ?? 0) * 100).toFixed(1)}%
                   </span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           );
         })()}

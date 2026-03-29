@@ -26,6 +26,11 @@ export function MarketClickProvider({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(false);
 
   const openMarket = useCallback(async (marketId: string, market?: Market) => {
+    // If we already know this is a child market of an event, open the event instead
+    if (market?.event_id) {
+      return openEvent(market.event_id);
+    }
+
     setLoading(true);
     setBets([]);
     setSelectedEvent(null);
@@ -34,6 +39,11 @@ export function MarketClickProvider({ children }: { children: React.ReactNode })
       const res = await fetch(`${API}/v1/markets/${marketId}`);
       if (res.ok) {
         const data = await res.json();
+        // If fetched market is a child of an event, redirect to event view
+        if (data.event_id) {
+          setLoading(false);
+          return openEvent(data.event_id);
+        }
         setSelectedMarket(fixMarketNumerics(data));
         setBets(Array.isArray(data.bets) ? data.bets.map(fixBetNumerics) : []);
       } else if (market) {

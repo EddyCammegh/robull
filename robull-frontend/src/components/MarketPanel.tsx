@@ -26,10 +26,14 @@ function getOutcomes(kind: 'market' | 'event', market?: Market, event?: RobullEv
   if (kind === 'market' && market) {
     const probs = liveProbs ?? market.current_probs ?? market.initial_probs ?? [];
     if (!market.outcomes?.length || !probs.length) return [];
-    const isBinaryYesNo = market.outcomes.length === 2
+    const childLabel = market.event_id && market.outcome_label ? market.outcome_label : null;
+    const isBinaryYesNo = !childLabel && market.outcomes.length === 2
       && market.outcomes[0] === 'Yes' && market.outcomes[1] === 'No';
     const limit = isBinaryYesNo ? 2 : 6;
-    return market.outcomes.slice(0, limit).map((label, i) => ({ label, probability: probs[i] ?? 0, isLeader: i === 0 }));
+    return market.outcomes.slice(0, limit).map((rawLabel, i) => {
+      const label = (i === 0 && childLabel) ? childLabel : rawLabel;
+      return { label, probability: probs[i] ?? 0, isLeader: i === 0 };
+    });
   }
   if (kind === 'event' && event?.outcomes?.length) {
     return [...event.outcomes]
