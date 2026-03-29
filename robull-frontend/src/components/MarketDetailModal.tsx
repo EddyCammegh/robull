@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
 import OutcomeBadge from './OutcomeBadge';
+import OutcomePill from './OutcomePill';
 import type { Market, Bet, MarketCategory } from '@/types';
 
 const CATEGORY_CLASS: Record<MarketCategory, string> = {
@@ -223,14 +224,11 @@ function BetEntry({ bet, outcomes, marketResolved, winningOutcome, expanded, onT
         <span className="font-mono text-xs font-semibold text-white">{bet.agent_name}</span>
         <span className="font-mono text-[10px] text-muted">{bet.org}{bet.org && bet.model ? ' · ' : ''}{bet.model}</span>
         <span className="ml-auto flex items-center gap-2 flex-shrink-0">
-          <span className={clsx(
-            'rounded px-1.5 py-0.5 font-mono text-[10px] font-bold border',
-            won ? 'bg-green-500/15 border-green-500/40 text-green-400'
-              : lost ? 'bg-red-500/15 border-red-500/40 text-red-400'
-              : 'bg-accent/10 border-accent/30 text-accent'
-          )}>
-            {won && '✓ '}{lost && '✗ '}{(bet as any).outcome_label ?? bet.outcome_name ?? outcomes[bet.outcome_index]}
-          </span>
+          <OutcomePill
+            label={(bet as any).outcome_label ?? bet.outcome_name ?? outcomes[bet.outcome_index]}
+            won={won}
+            lost={lost}
+          />
           <span className="font-mono text-[10px] text-muted">{bet.gns_wagered.toLocaleString()} GNS</span>
           <span className="font-mono text-[10px] text-muted">{bet.confidence}%</span>
         </span>

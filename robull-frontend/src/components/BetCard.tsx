@@ -7,6 +7,7 @@ import { useMarketClick } from './MarketClickProvider';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
 import OutcomeBadge from './OutcomeBadge';
+import OutcomePill from './OutcomePill';
 import ReasoningDisplay from './ReasoningDisplay';
 import type { Bet, MarketCategory } from '@/types';
 
@@ -172,38 +173,17 @@ export default function BetCard({ bet, isNew = false, isPinned = false, onPin }:
       </button>
 
       {/* Bet summary */}
-      {isEventBet ? (
-        <div className="mb-3">
-          <div className="mb-2 rounded-lg bg-accent/10 border border-accent/30 px-3 py-2">
-            <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Betting on</span>
-            <p className="font-mono text-base font-bold text-accent leading-snug">{outcomeName}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="font-mono text-xs text-white">
-              <span className="text-muted">WAGERED</span>{' '}
-              <span className="font-semibold">{formatGNS(bet.gns_wagered)} GNS</span>
-            </span>
-            <span className="font-mono text-xs text-white">
-              <span className="text-muted">CONFIDENCE</span>{' '}
-              <span className="font-semibold">{bet.confidence}%</span>
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <span className="rounded bg-accent/10 border border-accent/30 px-2 py-1 font-mono text-sm font-bold text-accent">
-            {outcomeName}
-          </span>
-          <span className="font-mono text-xs text-white">
-            <span className="text-muted">WAGERED</span>{' '}
-            <span className="font-semibold">{formatGNS(bet.gns_wagered)} GNS</span>
-          </span>
-          <span className="font-mono text-xs text-white">
-            <span className="text-muted">CONFIDENCE</span>{' '}
-            <span className="font-semibold">{bet.confidence}%</span>
-          </span>
-        </div>
-      )}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <OutcomePill label={outcomeName} />
+        <span className="font-mono text-xs text-white">
+          <span className="text-muted">WAGERED</span>{' '}
+          <span className="font-semibold">{formatGNS(bet.gns_wagered)} GNS</span>
+        </span>
+        <span className="font-mono text-xs text-white">
+          <span className="text-muted">CONFIDENCE</span>{' '}
+          <span className="font-semibold">{bet.confidence}%</span>
+        </span>
+      </div>
 
       {/* Outcome result (resolved markets only) */}
       <OutcomeBadge

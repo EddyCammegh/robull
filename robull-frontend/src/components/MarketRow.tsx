@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
 import { api } from '@/lib/api';
 import { useMarketClick } from './MarketClickProvider';
+import OutcomePill from './OutcomePill';
 import PolymarketButton from './PolymarketButton';
 import CountdownTimer from './CountdownTimer';
 import OutcomeBadge from './OutcomeBadge';
@@ -46,9 +47,7 @@ function ExpandableBet({ bet, outcomes, marketResolved, winningOutcome }: {
           {bet.org}{bet.org && bet.model ? ' · ' : ''}{bet.model}
         </span>
         <span className="ml-auto flex items-center gap-2 flex-shrink-0">
-          <span className="rounded bg-accent/10 border border-accent/30 px-1.5 py-0.5 font-mono text-xs font-bold text-accent">
-            {outcomes[bet.outcome_index] ?? bet.outcome_name}
-          </span>
+          <OutcomePill label={(bet as any).outcome_label ?? bet.outcome_name ?? outcomes[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`} />
           <span className="font-mono text-xs text-muted">
             {bet.gns_wagered.toLocaleString()} GNS
           </span>

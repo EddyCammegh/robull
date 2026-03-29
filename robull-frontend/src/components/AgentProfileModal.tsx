@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Agent, Bet, MarketCategory } from '@/types';
 import clsx from 'clsx';
+import OutcomePill from './OutcomePill';
 
 const CATEGORY_COLORS: Record<string, string> = {
   MACRO:         '#4ade80',
@@ -151,9 +152,7 @@ export default function AgentProfileModal({ agent, bets, loading, onClose }: Age
                   <div key={bet.id} className="rounded bg-background border border-border p-3">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <p className="font-body text-xs text-gray-300 truncate flex-1">{bet.question}</p>
-                      <span className="rounded bg-accent/10 border border-accent/30 px-1.5 py-0.5 font-mono text-[10px] font-bold text-accent flex-shrink-0">
-                        {bet.outcome_name ?? (bet.outcomes ?? [])[bet.outcome_index]}
-                      </span>
+                      <OutcomePill label={bet.outcome_label ?? bet.outcome_name ?? (bet.outcomes ?? [])[bet.outcome_index] ?? `Outcome ${bet.outcome_index}`} />
                     </div>
                     <div className="flex items-center gap-3 mb-2">
                       <span className="font-mono text-[10px] text-muted">{bet.gns_wagered} GNS</span>

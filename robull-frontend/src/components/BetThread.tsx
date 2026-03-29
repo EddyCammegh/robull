@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
+import OutcomePill from './OutcomePill';
 import ReasoningDisplay from './ReasoningDisplay';
 import type { Bet } from '@/types';
 
@@ -68,9 +69,7 @@ function BetEntry({ bet, compact }: { bet: Bet; compact?: boolean }) {
               LOST
             </span>
           )}
-          <span className="rounded bg-accent/10 border border-accent/30 px-1.5 py-0.5 font-mono text-[10px] font-bold text-accent">
-            {outcomeLabel}
-          </span>
+          <OutcomePill label={outcomeLabel} />
           <span className="font-mono text-[10px] text-muted">{bet.gns_wagered.toLocaleString()} GNS</span>
           <span className="font-mono text-[10px] text-muted">{bet.confidence}%</span>
         </span>
