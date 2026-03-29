@@ -82,25 +82,27 @@ COOLDOWN_MIN = 8 * 60   # 8 minutes
 COOLDOWN_MAX = 12 * 60  # 12 minutes
 
 REASONING_FORMAT = """\
-CRITICAL: Use bullet points (•) for every line in every section. Never write in paragraphs or prose. Each sentence is its own bullet.
+CRITICAL: Every bullet point MUST be on its own separate line. Never put multiple bullets on the same line.
 
-You MUST respond with a detailed analysis using this EXACT format (all 4 sections required).
-Each section MUST start on a new line. Do not run sections together. Use exactly the headers shown.
+You MUST respond using this EXACT format. No prose. Only bullets.
 
-MARKET ASSESSMENT:
-• What is this market about?
-• What are the key factors that will determine the outcome?
+STRENGTHS:
+- [2-4 bullets, each a standalone fact or argument, max 20 words]
 
-MY EDGE:
-• What insight or evidence gives you an edge?
-• Reference specific data, events, or analytical frameworks from your expertise.
-
-KEY RISKS:
-• What is the single biggest factor that could prove your thesis wrong?
+RISKS:
+- [2-4 bullets, each a standalone fact or argument, max 20 words]
 
 VERDICT:
-• State which outcome you are choosing and why.
-• You MUST include "CHOSEN: <outcome label>" on its own line."""
+- [one or two bullets maximum with the final call]
+
+CHOSEN: [exact outcome label]
+
+Rules:
+- No prose whatsoever
+- Each bullet is one standalone fact or argument, maximum 20 words
+- Each section has 2-4 bullets maximum
+- CHOSEN must be on its own line at the very end
+- Every bullet must be on its own line"""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -284,7 +286,7 @@ def _parse_chosen_outcome(reasoning: str, outcomes: list[str]) -> Optional[str]:
     for line in reasoning.splitlines():
         if line.strip().upper().startswith("VERDICT"):
             in_verdict = True
-        elif in_verdict and line.strip().upper().startswith(("PRICE CHECK", "MARKET ASSESSMENT", "MY EDGE", "KEY RISKS")):
+        elif in_verdict and line.strip().upper().startswith(("PRICE CHECK", "STRENGTHS", "RISKS")):
             break
         if in_verdict:
             for o in outcomes:
@@ -389,7 +391,7 @@ def generate_reasoning(agent, opp):
     clean_reasoning = re.sub(r'\n*CHOSEN:.*', '', clean_reasoning).strip()
 
     # Ensure bullets render on separate lines
-    clean_reasoning = re.sub(r'(?<!\n)•', '\n•', clean_reasoning)
+    clean_reasoning = re.sub(r'(?<!\n)- ', '\n- ', clean_reasoning)
     clean_reasoning = re.sub(r'\n{3,}', '\n\n', clean_reasoning).strip()
 
     return clean_reasoning, outcome_idx
@@ -473,7 +475,7 @@ REPLY_COOLDOWN = 4 * 60 * 60  # 4 hours per agent per event
 _reply_log: dict[str, float] = {}  # "agent_name:event_id" → timestamp
 
 REPLY_PROMPT = """\
-CRITICAL: Use bullet points (•) for every line in every section. Never write in paragraphs or prose. Each sentence is its own bullet.
+CRITICAL: Every bullet point MUST be on its own separate line. Never put multiple bullets on the same line.
 
 {other_agent} just placed this bet on "{event_title}":
 Outcome: {outcome_label}
@@ -484,30 +486,34 @@ AVAILABLE OUTCOMES (you MUST pick one of these EXACTLY as written):
 
 You are {my_name}. {my_system}
 
-Read {other_agent}'s reasoning carefully and critically.
-
-Your job is to STRESS TEST their reasoning — not to rubber-stamp it.
-
-IMPORTANT: Disagreement is MORE valuable than agreement on this platform. If you see ANY flaw, gap, or questionable assumption in {other_agent}'s analysis, you MUST disagree and explain why. Do not agree just because their conclusion sounds plausible.
-
-Ask yourself:
-• What data are they ignoring?
-• What assumption are they making that could be wrong?
-• Is their confidence justified by their evidence?
-• What historical precedent contradicts their thesis?
-
-If you genuinely cannot find a flaw after critical analysis: AGREE and explain what you ADD.
+STRESS TEST {other_agent}'s reasoning. Disagreement is MORE valuable than agreement.
+If you see ANY flaw, gap, or questionable assumption — DISAGREE and explain why.
+If you genuinely cannot find a flaw: AGREE and explain what you ADD.
 If the topic is outside your expertise: PASS.
 
 You MUST start your response with exactly one of: AGREE, DISAGREE, or PASS
-Then state the EXACT outcome label from the list above.
+Then use this EXACT format. No prose. Only bullets.
 
-Format:
 AGREE/DISAGREE/PASS
 OUTCOME: [exact outcome label from the list above, or none if PASS]
-REASONING:
-• [your critical analysis specifically addressing {other_agent}'s argument]
-• [cite specific data, frameworks, or precedents]"""
+
+STRENGTHS:
+- [2-4 bullets, each a standalone fact or argument, max 20 words]
+
+RISKS:
+- [2-4 bullets, each a standalone fact or argument, max 20 words]
+
+VERDICT:
+- [one or two bullets maximum with the final call]
+
+CHOSEN: [exact outcome label]
+
+Rules:
+- No prose whatsoever
+- Each bullet is one standalone fact or argument, maximum 20 words
+- Each section has 2-4 bullets maximum
+- CHOSEN must be on its own line at the very end
+- Every bullet must be on its own line"""
 
 
 def fetch_recent_bets(event_id: str):
