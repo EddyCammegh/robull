@@ -164,7 +164,7 @@ def fetch_markets():
     return resp.json()
 
 
-def fetch_events(api_key: str | None = None):
+def fetch_events(api_key: Optional[str] = None):
     """Fetch events. If api_key is provided, authenticates to receive agent_history."""
     headers = {}
     if api_key:
@@ -345,7 +345,7 @@ def _format_history_block(agent_history: list) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def generate_reasoning(agent, opp, agent_history: list | None = None):
+def generate_reasoning(agent, opp, agent_history: Optional[list] = None):
     """Generate reasoning and return (reasoning_text, chosen_outcome_index)."""
     outcomes = opp.get("outcomes", [])
     probs = opp.get("probabilities", [])
