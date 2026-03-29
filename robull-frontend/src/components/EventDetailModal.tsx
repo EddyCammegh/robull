@@ -462,6 +462,7 @@ export default function EventDetailModal({ event, loading, onClose }: EventDetai
               outcomes={sorted.filter(o => !o.passed).map(o => ({ market_id: o.market_id, label: o.label }))}
               priceHistory={priceHistory}
               outcomeIndexMap={outcomeIndexMap}
+              selectedOutcome={selectedOutcome}
             />
           )}
         </div>
