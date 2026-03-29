@@ -87,22 +87,22 @@ CRITICAL: Every bullet point MUST be on its own separate line. Never put multipl
 You MUST respond using this EXACT format. No prose. Only bullets.
 
 STRENGTHS:
-- [2-4 bullets, each a standalone fact or argument, max 20 words]
+• [2-4 bullets, each a standalone fact or argument, max 20 words]
 
 RISKS:
-- [2-4 bullets, each a standalone fact or argument, max 20 words]
+• [2-4 bullets, each a standalone fact or argument, max 20 words]
 
 VERDICT:
-- [one or two bullets maximum with the final call]
+• [one or two bullets maximum with the final call]
 
 CHOSEN: [exact outcome label]
 
 Rules:
-- No prose whatsoever
-- Each bullet is one standalone fact or argument, maximum 20 words
-- Each section has 2-4 bullets maximum
-- CHOSEN must be on its own line at the very end
-- Every bullet must be on its own line"""
+• No prose whatsoever
+• Each bullet is one standalone fact or argument, maximum 20 words
+• Each section has 2-4 bullets maximum
+• CHOSEN must be on its own line at the very end
+• Every bullet must be on its own line"""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -390,8 +390,10 @@ def generate_reasoning(agent, opp):
     clean_reasoning = re.sub(r'\n*PRICE CHECK:.*$', '', reasoning, flags=re.DOTALL).strip()
     clean_reasoning = re.sub(r'\n*CHOSEN:.*', '', clean_reasoning).strip()
 
-    # Ensure bullets render on separate lines
-    clean_reasoning = re.sub(r'(?<!\n)- ', '\n- ', clean_reasoning)
+    # Ensure every • bullet is on its own line
+    clean_reasoning = re.sub(r'(?<!\n)•', '\n•', clean_reasoning)
+    # Ensure section headers have a blank line before them
+    clean_reasoning = re.sub(r'(?<!\n\n)(STRENGTHS:|RISKS:|VERDICT:)', r'\n\n\1', clean_reasoning)
     clean_reasoning = re.sub(r'\n{3,}', '\n\n', clean_reasoning).strip()
 
     return clean_reasoning, outcome_idx
@@ -498,22 +500,22 @@ AGREE/DISAGREE/PASS
 OUTCOME: [exact outcome label from the list above, or none if PASS]
 
 STRENGTHS:
-- [2-4 bullets, each a standalone fact or argument, max 20 words]
+• [2-4 bullets, each a standalone fact or argument, max 20 words]
 
 RISKS:
-- [2-4 bullets, each a standalone fact or argument, max 20 words]
+• [2-4 bullets, each a standalone fact or argument, max 20 words]
 
 VERDICT:
-- [one or two bullets maximum with the final call]
+• [one or two bullets maximum with the final call]
 
 CHOSEN: [exact outcome label]
 
 Rules:
-- No prose whatsoever
-- Each bullet is one standalone fact or argument, maximum 20 words
-- Each section has 2-4 bullets maximum
-- CHOSEN must be on its own line at the very end
-- Every bullet must be on its own line"""
+• No prose whatsoever
+• Each bullet is one standalone fact or argument, maximum 20 words
+• Each section has 2-4 bullets maximum
+• CHOSEN must be on its own line at the very end
+• Every bullet must be on its own line"""
 
 
 def fetch_recent_bets(event_id: str):

@@ -4,10 +4,10 @@ import { useState } from 'react';
 
 interface Section {
   header: string;
-  content: string;
+  bullets: string[];
 }
 
-const SECTION_HEADERS = ['MARKET ASSESSMENT', 'MY EDGE', 'KEY RISKS', 'VERDICT'];
+const SECTION_HEADERS = ['STRENGTHS', 'RISKS', 'VERDICT'];
 
 function stripMarkdown(text: string): string {
   return text
@@ -20,51 +20,28 @@ function stripMarkdown(text: string): string {
 }
 
 /**
- * Split content into bullet points by sentence boundaries.
- * Avoids splitting on decimals (0.5%, $1.2B) and abbreviations (U.S., Fed.).
- * Merges fragments under 20 chars back into the previous bullet.
+ * Parse reasoning text into sections based on STRENGTHS/RISKS/VERDICT headers.
+ * Bullets are lines starting with • or - (after trimming).
+ * Strips CHOSEN: and CRITICAL: lines.
  */
-function toBullets(content: string): string[] {
-  // Replace decimal numbers with placeholder to avoid splitting
-  let safe = content.replace(/(\d)\.(\d)/g, '$1\x00$2');
-  // Replace common abbreviations
-  safe = safe.replace(/\b(U\.S|E\.U|Fed|Dr|Mr|Mrs|Inc|Ltd|Corp|etc|vs|Vol|Jr|Sr)\./gi, '$1\x01');
-
-  // Split on ". " or "." at end
-  const raw = safe.split(/\.\s+|\.$/);
-  // Restore placeholders
-  const parts = raw
-    .map(s => s.replace(/\x00/g, '.').replace(/\x01/g, '.').trim())
-    .filter(s => s.length > 0);
-
-  // Merge short fragments (< 20 chars) back into previous
-  const merged: string[] = [];
-  for (const part of parts) {
-    if (merged.length > 0 && part.length < 20) {
-      merged[merged.length - 1] += '. ' + part;
-    } else {
-      merged.push(part);
-    }
-  }
-
-  // Remove trailing period from each bullet
-  return merged.map(s => s.replace(/\.$/, ''));
-}
-
 function parseSections(raw: string): Section[] | null {
   const text = stripMarkdown(raw);
+
+  // Find each section header and its content
   const sections: Section[] = [];
 
   for (let i = 0; i < SECTION_HEADERS.length; i++) {
     const header = SECTION_HEADERS[i];
-    const pattern = new RegExp(`(?:^|\\n)\\s*${header.replace(/\s+/g, '\\s*')}\\s*[:—\\-]\\s*`, 'i');
+    const pattern = new RegExp(`(?:^|\\n)\\s*${header}\\s*[:—\\-]?\\s*`, 'i');
     const match = text.match(pattern);
-    if (!match) return null;
+    if (!match) continue;
 
     const start = match.index! + match[0].length;
+
+    // Find end: next section header, CHOSEN: line, or end of text
     let end = text.length;
     for (let j = i + 1; j < SECTION_HEADERS.length; j++) {
-      const nextPattern = new RegExp(`\\n\\s*${SECTION_HEADERS[j].replace(/\s+/g, '\\s*')}\\s*[:—\\-]`, 'i');
+      const nextPattern = new RegExp(`\\n\\s*${SECTION_HEADERS[j]}\\s*[:—\\-]`, 'i');
       const nextMatch = text.slice(start).match(nextPattern);
       if (nextMatch) {
         end = start + nextMatch.index!;
@@ -72,15 +49,45 @@ function parseSections(raw: string): Section[] | null {
       }
     }
 
-    sections.push({ header, content: text.slice(start, end).trim() });
+    // Also stop at CHOSEN: line
+    const chosenMatch = text.slice(start, end).match(/\n\s*CHOSEN:/i);
+    if (chosenMatch) {
+      end = start + chosenMatch.index!;
+    }
+
+    const content = text.slice(start, end).trim();
+
+    // Extract bullets: lines starting with • or -
+    const bullets = content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('•') || line.startsWith('-'))
+      .map(line => line.replace(/^[•\-]\s*/, '').trim())
+      .filter(line => line.length > 0);
+
+    // If no bullet markers found, split on newlines as fallback
+    if (bullets.length === 0 && content.length > 0) {
+      const fallback = content
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.match(/^(CHOSEN|CRITICAL):/i));
+      if (fallback.length > 0) {
+        sections.push({ header, bullets: fallback });
+        continue;
+      }
+    }
+
+    if (bullets.length > 0) {
+      sections.push({ header, bullets });
+    }
   }
 
-  return sections.length >= 3 ? sections : null;
+  return sections.length >= 2 ? sections : null;
 }
 
 function getVerdict(sections: Section[]): string[] {
   const verdict = sections.find(s => s.header === 'VERDICT');
-  return toBullets(verdict?.content ?? sections[sections.length - 1]?.content ?? '');
+  return verdict?.bullets ?? sections[sections.length - 1]?.bullets ?? [];
 }
 
 interface ReasoningDisplayProps {
@@ -116,7 +123,6 @@ export default function ReasoningDisplay({ reasoning, defaultExpanded = false }:
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {sections.map((s) => {
-              const bullets = toBullets(s.content);
               const isVerdict = s.header === 'VERDICT';
               return (
                 <div key={s.header}>
@@ -132,7 +138,7 @@ export default function ReasoningDisplay({ reasoning, defaultExpanded = false }:
                     {s.header}
                   </p>
                   <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {bullets.map((b, i) => (
+                    {s.bullets.map((b, i) => (
                       <li key={i} style={{
                         fontSize: 13,
                         lineHeight: 1.5,
@@ -161,7 +167,37 @@ export default function ReasoningDisplay({ reasoning, defaultExpanded = false }:
     );
   }
 
-  // Unstructured reasoning
+  // Unstructured reasoning — still parse • bullets if present
+  const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const hasBullets = lines.some(l => l.startsWith('•') || l.startsWith('-'));
+
+  if (hasBullets) {
+    const bullets = lines
+      .filter(l => !l.match(/^(CHOSEN|CRITICAL):/i))
+      .map(l => l.replace(/^[•\-]\s*/, '').trim())
+      .filter(l => l.length > 0);
+
+    return (
+      <div>
+        {(!expanded ? bullets.slice(0, 3) : bullets).map((b, i) => (
+          <p key={i} style={{ fontSize: 13, lineHeight: 1.5, color: '#ccc', display: 'flex', gap: 6 }}>
+            <span style={{ color: '#555', flexShrink: 0 }}>&bull;</span>
+            <span>{b}</span>
+          </p>
+        ))}
+        {bullets.length > 3 && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="mt-1 font-mono text-[10px] text-accent hover:text-accent-dim"
+          >
+            {expanded ? 'COLLAPSE \u2191' : `+${bullets.length - 3} MORE`}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Plain text fallback
   const LIMIT = 200;
   const isLong = cleanText.length > LIMIT;
 
